@@ -11,8 +11,6 @@ import os
 
 # Установка уровеня логирования: (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 logging.basicConfig(level=logging.INFO)
-
-# Устанавливаем уровень логирования для httpx на WARNING (или ERROR)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # Загрузка ключа шифрования
@@ -46,13 +44,13 @@ def save_encrypted_file(filename, data):
 def load_encrypted_file(filename):
     try:
         if not os.path.exists(filename):
-            logging.info(f"Файл {filename} не найден. Создается новый.")
             return {}
         with open(filename, 'rb') as file:
             encrypted_data = file.read()
-        decrypted_data = decrypt_data(encrypted_data)
-        logging.info(f"Данные успешно расшифрованы: {decrypted_data}")
-        return decrypted_data
+        return decrypt_data(encrypted_data)
+    except FileNotFoundError:
+        logging.info(f"Файл {filename} не найден. Создается новый.")
+        return {}
     except Exception as e:
         logging.error(f"Ошибка при загрузке данных из {filename}: {e}")
         return {}
@@ -70,27 +68,8 @@ def save_active_chats():
     save_encrypted_file('active_chats.json', active_chats)
 
 # Загрузка активных чатов
-# def load_active_chats():
-#     return load_encrypted_file('active_chats.json')
-
 def load_active_chats():
-    try:
-        chats = load_encrypted_file('active_chats.json')
-        
-        if isinstance(chats, dict):
-            # Проверяем, что все значения - словари с нужными ключами
-            for user_id, chat_info in chats.items():
-                if not isinstance(chat_info, dict) or "partner_id" not in chat_info:
-                    logging.error(f"Некорректная структура данных для {user_id}: {chat_info}")
-                    return {}
-            return chats
-        else:
-            logging.warning("Расшифрованные данные active_chats не являются словарём. Загружается пустой словарь.")
-            return {}
-    except Exception as e:
-        logging.error(f"Ошибка при загрузке active_chats.json: {e}")
-        return {}
-
+    return load_encrypted_file('active_chats.json')
 
 # Для сохранения заблокированных пользователей
 def save_blocked_users(blocked_users):
@@ -114,7 +93,6 @@ def is_blocked(user1, user2):
 # Загрузка данных
 users = load_data()
 active_chats = load_active_chats()
-logging.info(f"Структура active_chats после загрузки: {active_chats}")
 
 # Функция создания клавиатуры
 def get_keyboard(is_searching=False):
@@ -238,43 +216,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    other_user = active_chats[user_id]["partner_id"]
+    other_user = active_chats[user_id]
 
     # Отправляем сообщение собеседнику
     if update.message.text:
-        sent_message = await context.bot.send_message(
+        await context.bot.send_message(
             chat_id=other_user,
             text=update.message.text
         )
         logging.info(f"Сообщение от {user_id} к {other_user}: {update.message.text}")
-
-        # Сохраняем ID отправленного сообщения
-        active_chats[user_id]["last_message_id"] = sent_message.message_id
-        active_chats[other_user]["last_message_id"] = sent_message.message_id
-
-
-# Обработчик редактирования сообщений
-async def handle_message_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-
-    if user_id not in active_chats:
-        logging.info(f"Пользователь {user_id} попытался отредактировать сообщение вне активного чата.")
-        return
-
-    other_user = active_chats[user_id]["partner_id"]
-    last_message_id = active_chats[user_id].get("last_message_id")
-
-    if update.edited_message and update.edited_message.text and last_message_id:
-        try:
-            # Редактируем сообщение для собеседника
-            await context.bot.edit_message_text(
-                chat_id=other_user,
-                message_id=last_message_id,
-                text=f"(Редактировано) {update.edited_message.text}"
-            )
-            logging.info(f"Сообщение от {user_id} для {other_user} было отредактировано: {update.edited_message.text}")
-        except Exception as e:
-            logging.error(f"Ошибка при редактировании сообщения от {user_id} для {other_user}: {e}")
 
 # Основная функция
 def main():
@@ -287,9 +237,6 @@ def main():
 
     # Обработчик текстовых сообщений
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-    # Обработчик редактирования сообщений
-    application.add_handler(MessageHandler(filters.UpdateType.EDITED_MESSAGE, handle_message_edit))
 
     application.run_polling()
 
