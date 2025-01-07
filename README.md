@@ -1,4 +1,4 @@
-GoodbyeDPI — Deep Packet Inspection circumvention utility
+AnonChat — Анонимный чат для общения в Telegram
 =========================
 
 This software designed to bypass Deep Packet Inspection systems found in many Internet Service Providers which block access to certain websites.
