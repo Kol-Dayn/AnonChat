@@ -61,7 +61,12 @@ def save_data(users):
 
 # Загрузка данных пользователей
 def load_data():
-    return load_encrypted_file('users.json')
+    users = load_encrypted_file('users.json')
+    # Если файл не найден или данные пустые, создаем новый файл с пустыми данными
+    if not users:
+        users = {}  # или создайте начальные данные, если необходимо
+        save_data(users)
+    return users
 
 # Для сохранения активных чатов
 def save_active_chats():
@@ -105,9 +110,15 @@ def get_keyboard(is_searching=False):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
 
+    # Убедитесь, что пользователь есть в словаре
     if user_id not in users:
         users[user_id] = {"status": "normal", "chat_with": None}
         save_data(users)
+
+    # Проверяем, если пользователь уже в чате, игнорируем команду
+    if users[user_id]["status"] == "chatting":
+        await update.message.reply_text("Вы уже в чате. Завершите текущий чат перед тем, как начать новый.")
+        return
 
     await update.message.reply_text(
         "Добро пожаловать! Используйте /search для поиска собеседника.", 
@@ -118,11 +129,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
 
+    # Убедитесь, что пользователь есть в словаре
+    if user_id not in users:
+        users[user_id] = {"status": "normal", "chat_with": None}
+        save_data(users)
+
     if users[user_id]["status"] == "in search":
         await update.message.reply_text("Вы уже ищете собеседника.", reply_markup=get_keyboard(True))
         return
 
-    logging.info(f"(!) Пользователь {user_id} начал поиск собеседника. (!)") # УДАЛИТЬ
+    logging.info(f"(!) Пользователь {user_id} начал поиск собеседника. (!)")
 
     users[user_id]["status"] = "in search"
     save_data(users)
@@ -143,7 +159,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             save_data(users)
             save_active_chats()
 
-            logging.info(f"(!) Создан активный чат между пользователем {user_id} и пользователем {other_user}. (!)") # УДАЛИТЬ
+            logging.info(f"(!) Создан активный чат между пользователем {user_id} и пользователем {other_user}. (!)")
 
             await update.message.reply_text("Собеседник найден!", reply_markup=get_keyboard(False))
             await context.bot.send_message(
@@ -154,6 +170,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
     await update.message.reply_text("Свободных собеседников нет.\n\nПоиск займет больше времени, чем обычно...")
+
 
 # Остановка поиска
 async def stop_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -218,13 +235,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     other_user = active_chats[user_id]
 
-    # Отправляем сообщение собеседнику
+    # Проверяем, если сообщение не текстовое, то отправляем его без изменений
     if update.message.text:
+        message_text = update.message.text
         await context.bot.send_message(
             chat_id=other_user,
-            text=update.message.text
+            text=message_text
         )
-        logging.info(f"Сообщение от {user_id} к {other_user}: {update.message.text}")
+        logging.info(f"Сообщение от {user_id} к {other_user}: {message_text}")
+    else:
+        # Отправляем мультимедийное сообщение (например, стикер, фото и т.д.) без изменений
+        await context.bot.copy_message(
+            chat_id=other_user,
+            from_chat_id=update.message.chat.id,
+            message_id=update.message.message_id
+        )
+        logging.info(f"Мультимедийное сообщение от {user_id} к {other_user}.")
 
 # Основная функция
 def main():
