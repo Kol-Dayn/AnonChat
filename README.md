@@ -73,7 +73,7 @@ TOKEN = "YOUR_BOT_TOKEN"
 ADMIN_ID = 123456789
 ```
   
-*Вместо `YOUR_BOT_TOKEN"` вставьте TOKEN, полученный у @BotFather.*  
+*Вместо `YOUR_BOT_TOKEN` вставьте TOKEN, полученный у @BotFather.*  
 *Вместо `123456789` вставьте свой ID, полученный у @getmyid_bot*
 <hr>
 
