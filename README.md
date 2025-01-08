@@ -19,8 +19,8 @@ If it works — congratulations! You can use it as-is or configure further.
 
 Download [latest version from Releases page](https://github.com/ValdikSS/GoodbyeDPI/releases) and run.
 
-## Supported arguments
-To get relevant information about your version of the program, use the -h (--help) argument at startup.
+## Команды бота
+Ниже приведен список всех команд, которые поддерживает бот.
 ```
 Usage: goodbyedpi.exe [OPTION...]
  -p          block passive DPI
