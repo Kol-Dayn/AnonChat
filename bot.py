@@ -144,21 +144,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # Для создания нового чата
-async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def search(update: Update, context: ContextTypes.DEFAULT_TYPE, skip_searching_message=False):
     user_id = str(update.effective_user.id)
 
-    # Убедитесь, что пользователь есть в словаре
     if user_id not in users:
         users[user_id] = {"status": "normal", "chat_with": None}
         save_data(users)
 
-    # Проверка, если пользователь уже в чате
     if users[user_id]["status"] == "chatting":
         await update.message.reply_text("Вы уже в чате. Завершите текущий чат перед тем, как начать новый.", reply_markup=get_keyboard())
         return
 
     if users[user_id]["status"] == "in search":
-        await update.message.reply_text("Вы уже ищете собеседника.", reply_markup=get_keyboard(True))
+        if not skip_searching_message:
+            await update.message.reply_text("Вы уже ищете собеседника.", reply_markup=get_keyboard(True))
         return
 
     logging.info(f"(!) Пользователь {user_id} начал поиск собеседника. (!)")
@@ -166,7 +165,8 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users[user_id]["status"] = "in search"
     save_data(users)
 
-    await update.message.reply_text("Ищу собеседника...", reply_markup=get_keyboard(True))
+    if not skip_searching_message:
+        await update.message.reply_text("Ищу собеседника...", reply_markup=get_keyboard(True))
 
     for other_user in users:
         if users[other_user]["status"] == "in search" and other_user != user_id:
@@ -177,7 +177,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             users[other_user]["chat_with"] = user_id
             active_chats[user_id] = {
                 "chat_with": other_user,
-                "message_map": {}  # Маппинг сообщений для этого чата
+                "message_map": {}
             }
             active_chats[other_user] = {
                 "chat_with": user_id,
@@ -216,28 +216,90 @@ async def stop_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer("Поиск остановлен.")
     await update.callback_query.edit_message_text("Поиск остановлен.", reply_markup=get_keyboard(False))
 
-# Завершение чата с удалением данных из active_chats
+# Команда /next
+async def next_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+
+    # Проверка: пользователь не в чате
+    if user_id not in active_chats:
+        await update.message.reply_text(
+            "Вы не в чате. Используйте /search для поиска собеседника.",
+            reply_markup=get_keyboard(),
+        )
+        return
+
+    other_user = active_chats[user_id]["chat_with"]
+
+    # Завершение текущего чата
+    del active_chats[user_id]
+    del active_chats[other_user]
+
+    blocked_users = load_blocked_users()
+    pair = ",".join(sorted([user_id, other_user]))
+    blocked_users[pair] = str(datetime.now())
+    save_blocked_users(blocked_users)
+
+    save_active_chats()
+
+    users[other_user]["status"] = "normal"
+    users[other_user]["chat_with"] = None
+    save_data(users)
+
+    try:
+        await context.bot.send_message(
+            other_user,
+            "Ваш собеседник завершил диалог. Используйте /search для поиска нового собеседника.",
+            reply_markup=get_keyboard(),
+        )
+    except Exception as e:
+        logging.error(f"Ошибка при уведомлении пользователя {other_user}: {e}")
+
+    users[user_id]["status"] = "in search"
+    users[user_id]["chat_with"] = None
+    save_data(users)
+
+    await update.message.reply_text(
+        "Текущий чат завершен. Ищу нового собеседника...",
+        reply_markup=get_keyboard(True),
+    )
+
+    # Запуск нового поиска
+    await search(update, context, skip_searching_message=True)
+
+# Команда /stop
 async def stop_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     
+    # Проверяем, есть ли пользователь в активных чатах
     if user_id not in active_chats:
         await update.message.reply_text("Вы не в чате. Используйте /search для поиска собеседника.")
         return
 
+    # Получаем ID другого пользователя
     other_user = active_chats[user_id]["chat_with"]
+    
+    # Удаляем данные чата
     del active_chats[user_id]
     del active_chats[other_user]
-
-    # Сохраняем заблокированных пользователей
+    
+    # Добавляем пользователей в список заблокированных
     blocked_users = load_blocked_users()
-    pair = ",".join(sorted([user_id, other_user]))  # Форматируем ключ
-    blocked_users[pair] = str(datetime.now())
+    pair = ",".join(sorted([user_id, other_user]))  # Формируем ключ для блокировки
+    blocked_users[pair] = str(datetime.now())  # Сохраняем текущее время блокировки
     save_blocked_users(blocked_users)
 
-    save_active_chats()  # Обновляем active_chats после завершения
+    save_active_chats()  # Обновляем файл с активными чатами
+    
+    # Обновляем статусы пользователей
+    users[user_id]["status"] = "normal"
+    users[other_user]["status"] = "normal"
+    users[user_id]["chat_with"] = None
+    users[other_user]["chat_with"] = None
+    save_data(users)
 
-    logging.info(f"(!) Чат между пользователем {user_id} и пользователем {other_user} завершен (!)")
+    logging.info(f"(!) Чат между пользователем {user_id} и пользователем {other_user} завершен, они занесены в блок на 1 час. (!)")
 
+    # Уведомляем пользователей
     await update.message.reply_text("Вы покинули чат. Используйте /search для нового собеседника.", reply_markup=get_keyboard())
     await context.bot.send_message(
         other_user,
@@ -245,6 +307,7 @@ async def stop_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=get_keyboard(),
     )
 
+# Команда /link
 async def link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
 
@@ -273,7 +336,7 @@ async def link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"Ошибка при отправке ссылки: {e}")
         await update.message.reply_text("Произошла ошибка при отправке ссылки.")
 
-# Обработчик текста сообщений с обновлением маппинга сообщений в active_chats.json
+# Обработчик сообщений
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
 
@@ -287,13 +350,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     other_user_id = active_chats[user_id]["chat_with"]
     text = update.message.text
 
-    # Блокировка упоминаний (@username) вне команды /link
-    if "@" in text and not text.startswith("/link"):
+    # Проверяем, что текст сообщения существует
+    if text and "@" in text and not text.startswith("/link"):
         await update.message.reply_text("Отправка упоминаний запрещена. Используйте /link.")
         return
 
     # Блокировка ссылок (включая обфусцированные ссылки с пробелами)
-    if re.search(r"(https?://|www\.[a-zA-Z]|[a-zA-Z]\.[a-z]{2,})", text.replace(" ", "")):
+    if text and re.search(r"(https?://|www\.[a-zA-Z]|[a-zA-Z]\.[a-z]{2,})", text.replace(" ", "")):
         await update.message.reply_text("Отправка ссылок запрещена.")
         return
 
@@ -396,6 +459,7 @@ def main():
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("search", search))
+    application.add_handler(CommandHandler("next", next_command))
     application.add_handler(CommandHandler("stop", stop_chat))
     application.add_handler(CommandHandler("link", link))
     application.add_handler(CallbackQueryHandler(stop_search, pattern="^stop_search$"))
