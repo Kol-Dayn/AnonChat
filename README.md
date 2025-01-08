@@ -19,7 +19,7 @@
  /stop          Завершить диалог 🛑
  /link          Отправить ссылку на свой Telegram аккаунт собеседнику 🔗
 ```
-## How to check
+## 📁 Файлы проекта
 To check if your ISP's DPI could be circumvented, first make sure that your provider does not poison DNS answers by enabling "Secure DNS (DNS over HTTPS)" option in your browser.
 
 * **Chrome**: Settings → [Privacy and security](chrome://settings/security) → Use secure DNS → With: NextDNS
