@@ -182,15 +182,19 @@ async def reset_interests(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = str(query.from_user.id)
     
-    try:
+    if users[user_id].get("interests"):
         users[user_id]["interests"] = []
         save_data(users)
-        await query.edit_message_reply_markup(reply_markup=get_interests_keyboard(users[user_id]["interests"]))
-    except telegram.error.BadRequest as e:
-        if str(e) == "Message is not modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message":
-            logging.info(f"Интересы пользователя {user_id} уже пусты и сообщение не изменено.")
-        else:
-            logging.error(f"Ошибка при сбросе интересов: {e}")
+        try:
+            await query.edit_message_reply_markup(reply_markup=get_interests_keyboard(users[user_id]["interests"]))
+        except telegram.error.BadRequest as e:
+            if str(e) == "Message is not modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message":
+                logging.info(f"Интересы пользователя {user_id} уже пусты и сообщение не изменено.")
+            else:
+                logging.error(f"Ошибка при сбросе интересов: {e}")
+    else:
+        logging.info(f"Интересы пользователя {user_id} уже пусты.")
+        await query.answer("У вас уже нет интересов.", show_alert=False)
 
 # Обработчик для выбора интересов
 async def handle_interests(update: Update, context: ContextTypes.DEFAULT_TYPE):
