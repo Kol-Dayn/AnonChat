@@ -50,7 +50,16 @@
 * **`Отредактированные сообщения`** — бот поддерживает редактирование уже отправленных сообщений.  
 
 ## 🍀 Установка и запуск бота
-Most Passive DPI send HTTP 302 Redirect if you try to access blocked website over HTTP and TCP Reset in case of HTTPS, faster than destination website. Packets sent by DPI usually have IP Identification field equal to `0x0000` or `0x0001`, as seen with Russian providers. These packets, if they redirect you to another website (censorship page), are blocked by GoodbyeDPI.
+
+**1. Установите все необходимые библиотеки из файла `requirements.txt`.**
+```
+cd /путь/к/вашему/проекту
+pip install -r requirements.txt
+```
+
+**2. Запустите файл `key_generator.py`**
+После запуска файла, в командной строке появится сообщение об успешном выполнении кода.  
+В папке с файлами бота должен появится файл `encryption.key`.
 
 ## 😇 Автор проекта
 
