@@ -2,6 +2,7 @@ import telegram
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 from telegram.ext import ContextTypes
+from telegram.constants import ParseMode
 from datetime import datetime, timedelta
 import logging
 import json
@@ -68,13 +69,30 @@ def load_data():
         save_data(users)
     return users
 
-# Для сохранения активных чатов
+# Сохранение активных чатов с маппингом сообщений
 def save_active_chats():
-    save_encrypted_file('active_chats.json', active_chats)
+    try:
+        with open('active_chats.json', 'wb') as file:
+            encrypted_data = encrypt_data(active_chats)
+            file.write(encrypted_data)
+        logging.info("Активные чаты успешно сохранены.")
+    except Exception as e:
+        logging.error(f"Ошибка при сохранении активных чатов: {e}")
 
-# Загрузка активных чатов
+# Загрузка активных чатов с маппингом сообщений
 def load_active_chats():
-    return load_encrypted_file('active_chats.json')
+    try:
+        if not os.path.exists('active_chats.json'):
+            return {}
+        with open('active_chats.json', 'rb') as file:
+            encrypted_data = file.read()
+        return decrypt_data(encrypted_data)
+    except FileNotFoundError:
+        logging.info("Файл с активными чатами не найден.")
+        return {}
+    except Exception as e:
+        logging.error(f"Ошибка при загрузке активных чатов: {e}")
+        return {}
 
 # Для сохранения заблокированных пользователей
 def save_blocked_users(blocked_users):
@@ -125,7 +143,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=get_keyboard()
     )
 
-# Обработчик команд поиска собеседника
+# Для создания нового чата
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
 
@@ -152,8 +170,14 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             users[user_id]["chat_with"] = other_user
             users[other_user]["chat_with"] = user_id
-            active_chats[user_id] = other_user
-            active_chats[other_user] = user_id
+            active_chats[user_id] = {
+                "chat_with": other_user,
+                "message_map": {}  # Маппинг сообщений для этого чата
+            }
+            active_chats[other_user] = {
+                "chat_with": user_id,
+                "message_map": {}
+            }
             users[user_id]["status"] = "chatting"
             users[other_user]["status"] = "chatting"
             save_data(users)
@@ -171,7 +195,6 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("Свободных собеседников нет.\n\nПоиск займет больше времени, чем обычно...")
 
-
 # Остановка поиска
 async def stop_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
@@ -180,7 +203,7 @@ async def stop_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.callback_query.answer("Вы не в поиске собеседника.", show_alert=True)
         return
 
-    logging.info(f"(!) Пользователь {user_id} остановил поиск собеседника. (!)") # УДАЛИТЬ
+    logging.info(f"(!) Пользователь {user_id} остановил поиск собеседника. (!)")
 
     users[user_id]["status"] = "normal"
     save_data(users)
@@ -188,7 +211,7 @@ async def stop_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer("Поиск остановлен.")
     await update.callback_query.edit_message_text("Поиск остановлен.", reply_markup=get_keyboard(False))
 
-# Завершение чата
+# Завершение чата с удалением данных из active_chats
 async def stop_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     
@@ -196,13 +219,9 @@ async def stop_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Вы не в чате. Используйте /search для поиска собеседника.")
         return
 
-    other_user = active_chats[user_id]
-    users[user_id]["status"] = "normal"
-    users[other_user]["status"] = "normal"
-    users[user_id]["chat_with"] = None
-    users[other_user]["chat_with"] = None
-    active_chats.pop(user_id)
-    active_chats.pop(other_user)
+    other_user = active_chats[user_id]["chat_with"]
+    del active_chats[user_id]
+    del active_chats[other_user]
 
     # Сохраняем заблокированных пользователей
     blocked_users = load_blocked_users()
@@ -210,8 +229,7 @@ async def stop_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     blocked_users[pair] = str(datetime.now())
     save_blocked_users(blocked_users)
 
-    save_data(users)
-    save_active_chats()
+    save_active_chats()  # Обновляем active_chats после завершения
 
     logging.info(f"(!) Чат между пользователем {user_id} и пользователем {other_user} завершен (!)")
 
@@ -222,35 +240,111 @@ async def stop_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=get_keyboard(),
     )
 
-# Обработчик текстовых сообщений
+# Обработчик текста сообщений с обновлением маппинга сообщений в active_chats.json
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
 
     if user_id not in active_chats:
         await update.message.reply_text(
             "Вы не в чате. Используйте /search для поиска собеседника.",
-            reply_markup=get_keyboard()
+            reply_markup=get_keyboard()  # Клавиатура для начала поиска
         )
         return
 
-    other_user = active_chats[user_id]
+    other_user_id = active_chats[user_id]["chat_with"]
 
-    # Проверяем, если сообщение не текстовое, то отправляем его без изменений
-    if update.message.text:
-        message_text = update.message.text
-        await context.bot.send_message(
-            chat_id=other_user,
-            text=message_text
-        )
-        logging.info(f"Сообщение от {user_id} к {other_user}: {message_text}")
-    else:
-        # Отправляем мультимедийное сообщение (например, стикер, фото и т.д.) без изменений
-        await context.bot.copy_message(
-            chat_id=other_user,
-            from_chat_id=update.message.chat.id,
-            message_id=update.message.message_id
-        )
-        logging.info(f"Мультимедийное сообщение от {user_id} к {other_user}.")
+    try:
+        reply_to_message_id = None
+
+        # Проверяем, является ли сообщение ответом
+        if update.message.reply_to_message:
+            replied_message_id = update.message.reply_to_message.message_id
+
+            # Проверяем, есть ли маппинг для ответа
+            if "message_map" in active_chats[user_id] and replied_message_id in active_chats[user_id]["message_map"]:
+                reply_to_message_id = active_chats[user_id]["message_map"][replied_message_id]
+
+        # Определяем тип сообщения
+        if update.message.text:
+            sent_message = await context.bot.send_message(
+                chat_id=other_user_id,
+                text=update.message.text,
+                reply_to_message_id=reply_to_message_id,
+                protect_content=True,
+            )
+        elif update.message.photo:
+            sent_message = await context.bot.send_photo(
+                chat_id=other_user_id,
+                photo=update.message.photo[-1].file_id,  # Берём самое большое фото
+                caption=update.message.caption,
+                reply_to_message_id=reply_to_message_id,
+                protect_content=True,
+            )
+        elif update.message.video:
+            sent_message = await context.bot.send_video(
+                chat_id=other_user_id,
+                video=update.message.video.file_id,
+                caption=update.message.caption,
+                reply_to_message_id=reply_to_message_id,
+                protect_content=True,
+            )
+        elif update.message.document:
+            sent_message = await context.bot.send_document(
+                chat_id=other_user_id,
+                document=update.message.document.file_id,
+                caption=update.message.caption,
+                reply_to_message_id=reply_to_message_id,
+                protect_content=True,
+            )
+        elif update.message.audio:
+            sent_message = await context.bot.send_audio(
+                chat_id=other_user_id,
+                audio=update.message.audio.file_id,
+                caption=update.message.caption,
+                reply_to_message_id=reply_to_message_id,
+                protect_content=True,
+            )
+        elif update.message.voice:
+            sent_message = await context.bot.send_voice(
+                chat_id=other_user_id,
+                voice=update.message.voice.file_id,
+                caption=update.message.caption,
+                reply_to_message_id=reply_to_message_id,
+                protect_content=True,
+            )
+        elif update.message.sticker:
+            sent_message = await context.bot.send_sticker(
+                chat_id=other_user_id,
+                sticker=update.message.sticker.file_id,
+                reply_to_message_id=reply_to_message_id,
+                protect_content=True,
+            )
+        elif update.message.video_note:
+            sent_message = await context.bot.send_video_note(
+                chat_id=other_user_id,
+                video_note=update.message.video_note.file_id,
+                reply_to_message_id=reply_to_message_id,
+                protect_content=True,
+            )
+        else:
+            await update.message.reply_text("Этот тип сообщения не поддерживается.")
+            return
+
+        # Обновляем маппинг сообщений в active_chats
+        if "message_map" not in active_chats[user_id]:
+            active_chats[user_id]["message_map"] = {}
+        if "message_map" not in active_chats[other_user_id]:
+            active_chats[other_user_id]["message_map"] = {}
+
+        active_chats[user_id]["message_map"][update.message.message_id] = sent_message.message_id
+        active_chats[other_user_id]["message_map"][sent_message.message_id] = update.message.message_id
+
+        # Сохраняем обновленный маппинг в файл
+        save_active_chats()
+
+    except Exception as e:
+        logging.error(f"Ошибка при обработке сообщения: {e}")
+        await update.message.reply_text("Произошла ошибка при пересылке сообщения.")
 
 # Основная функция
 def main():
@@ -262,7 +356,7 @@ def main():
     application.add_handler(CallbackQueryHandler(stop_search, pattern="^stop_search$"))
 
     # Обработчик текстовых сообщений
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_handler(MessageHandler((filters.TEXT | filters.ATTACHMENT) & ~filters.COMMAND, handle_message))
 
     application.run_polling()
 
