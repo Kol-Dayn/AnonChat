@@ -10,14 +10,14 @@ AnonChat — Анонимный чат для общения в Telegram
 Полный текст лицензии можно найти в файле [LICENSE.txt](./LICENSE.txt)
 
 ## Команды бота
-Ниже приведен список всех команд, которые поддерживает бот.
+Ниже представлен полный список команд, которые поддерживает бот.
+Эти команды позволят вам взаимодействовать с ботом, получать различные функции и управлять процессом общения:
 ```
-Usage: goodbyedpi.exe [OPTION...]
- -p          block passive DPI
- -q          block QUIC/HTTP3
- -r          replace Host with hoSt
- -s          remove space between host header and its value
- -m          mix Host header case (test.com -> tEsT.cOm)
+ /start         Перезапустить бота
+ /search        Начать поиск собеседника
+ /next          Завершить диалог и начать поиск собеседника
+ /stop          Завершить диалог
+ /link          Отправить ссылку на свой Telegram аккаунт собеседнику
  -f <value>  set HTTP fragmentation to value
  -k <value>  enable HTTP persistent (keep-alive) fragmentation and set it to value
  -n          do not wait for first segment ACK when -k is enabled
