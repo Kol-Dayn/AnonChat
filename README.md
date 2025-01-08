@@ -1,23 +1,12 @@
 AnonChat — Анонимный чат для общения в Telegram
 =========================
 
-This software designed to bypass Deep Packet Inspection systems found in many Internet Service Providers which block access to certain websites.
-
-It handles DPI connected using optical splitter or port mirroring (**Passive DPI**) which do not block any data but just replying faster than requested destination, and **Active DPI** connected in sequence.
-
-**Windows 7, 8, 8.1, 10 or 11** with administrator privileges required.
+Анонимный чат для общения 1 на 1 с случайным собеседником, обеспечивающий высокий уровень безопасности. Вся база данных зашифрована, что гарантирует конфиденциальность ваших разговоров. Поддержка множества команд для удобного взаимодействия и расширенной функциональности.
 
 # License
 
 Этот проект распространяется на условиях лицензии Apache-2.0 license.  
 Полный текст лицензии можно найти в файле [LICENSE.txt](./LICENSE.txt)
-
-These scripts launch GoodbyeDPI in recommended mode with DNS resolver redirection to Yandex DNS on non-standard port (to prevent DNS poisoning).  
-If it works — congratulations! You can use it as-is or configure further.
-
-# How to use
-
-Download [latest version from Releases page](https://github.com/ValdikSS/GoodbyeDPI/releases) and run.
 
 ## Команды бота
 Ниже приведен список всех команд, которые поддерживает бот.
