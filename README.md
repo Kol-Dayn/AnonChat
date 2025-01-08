@@ -52,7 +52,7 @@
 ## 🍀 Установка и запуск бота
 Most Passive DPI send HTTP 302 Redirect if you try to access blocked website over HTTP and TCP Reset in case of HTTPS, faster than destination website. Packets sent by DPI usually have IP Identification field equal to `0x0000` or `0x0001`, as seen with Russian providers. These packets, if they redirect you to another website (censorship page), are blocked by GoodbyeDPI.
 
-# 😇 Автор проекта
+## 😇 Автор проекта
 
 Thanks @basil00 for [WinDivert](https://github.com/basil00/Divert). That's the main part of this program.
 
