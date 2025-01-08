@@ -1,6 +1,6 @@
 import telegram
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
+from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from telegram.constants import ParseMode
 from datetime import datetime, timedelta
 import logging
@@ -10,7 +10,7 @@ from config import TOKEN
 import os
 import re
 
-# Установка уровеня логирования: (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+# Установка уровня логирования: (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
@@ -119,10 +119,11 @@ active_chats = load_active_chats()
 
 # Функция создания клавиатуры
 def get_keyboard(is_searching=False):
-    buttons = []
     if is_searching:
-        buttons.append([InlineKeyboardButton("Остановить поиск", callback_data="stop_search")])
-    return InlineKeyboardMarkup(buttons)
+        buttons = [[KeyboardButton("Остановить поиск")]]
+    else:
+        buttons = [[KeyboardButton("Начать поиск собеседника")]]
+    return ReplyKeyboardMarkup(buttons, resize_keyboard=True)
 
 # Стартовое сообщение
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -139,7 +140,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await update.message.reply_text(
-        "Добро пожаловать! Используйте /search для поиска собеседника.", 
+        "Добро пожаловать! Используйте кнопку ниже для поиска собеседника.", 
         reply_markup=get_keyboard()
     )
 
@@ -190,11 +191,11 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE, skip_search
 
             logging.info(f"(!) Создан активный чат между пользователем {user_id} и пользователем {other_user}. (!)")
 
-            await update.message.reply_text("Собеседник найден!", reply_markup=get_keyboard(False))
+            await update.message.reply_text("Собеседник найден!", reply_markup=ReplyKeyboardRemove())
             await context.bot.send_message(
                 other_user,
                 "Собеседник найден! Вы можете начать общение.",
-                reply_markup=get_keyboard(False),
+                reply_markup=ReplyKeyboardRemove(),
             )
             return
 
@@ -205,7 +206,7 @@ async def stop_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
 
     if users[user_id]["status"] != "in search":
-        await update.callback_query.answer("Вы не в поиске собеседника.", show_alert=True)
+        await update.message.reply_text("Вы не в поиске собеседника.", reply_markup=get_keyboard())
         return
 
     logging.info(f"(!) Пользователь {user_id} остановил поиск собеседника. (!)")
@@ -213,8 +214,7 @@ async def stop_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users[user_id]["status"] = "normal"
     save_data(users)
 
-    await update.callback_query.answer("Поиск остановлен.")
-    await update.callback_query.edit_message_text("Поиск остановлен.", reply_markup=get_keyboard(False))
+    await update.message.reply_text("Поиск остановлен.", reply_markup=get_keyboard(False))
 
 # Команда /next
 async def next_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -223,7 +223,7 @@ async def next_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Проверка: пользователь не в чате
     if user_id not in active_chats:
         await update.message.reply_text(
-            "Вы не в чате. Используйте /search для поиска собеседника.",
+            "Вы не в чате. Используйте кнопку ниже для поиска собеседника.",
             reply_markup=get_keyboard(),
         )
         return
@@ -248,7 +248,7 @@ async def next_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await context.bot.send_message(
             other_user,
-            "Ваш собеседник завершил диалог. Используйте /search для поиска нового собеседника.",
+            "Ваш собеседник завершил диалог. Используйте кнопку ниже для поиска нового собеседника.",
             reply_markup=get_keyboard(),
         )
     except Exception as e:
@@ -272,7 +272,7 @@ async def stop_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Проверяем, есть ли пользователь в активных чатах
     if user_id not in active_chats:
-        await update.message.reply_text("Вы не в чате. Используйте /search для поиска собеседника.")
+        await update.message.reply_text("Вы не в чате. Используйте кнопку ниже для поиска собеседника.", reply_markup=get_keyboard())
         return
 
     # Получаем ID другого пользователя
@@ -300,10 +300,10 @@ async def stop_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logging.info(f"(!) Чат между пользователем {user_id} и пользователем {other_user} завершен, они занесены в блок на 1 час. (!)")
 
     # Уведомляем пользователей
-    await update.message.reply_text("Вы покинули чат. Используйте /search для нового собеседника.", reply_markup=get_keyboard())
+    await update.message.reply_text("Вы покинули чат. Используйте кнопку ниже для нового собеседника.", reply_markup=get_keyboard())
     await context.bot.send_message(
         other_user,
-        "Ваш собеседник покинул чат. Используйте /search для нового собеседника.",
+        "Ваш собеседник покинул чат. Используйте кнопку ниже для нового собеседника.",
         reply_markup=get_keyboard(),
     )
 
@@ -313,7 +313,7 @@ async def link(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if user_id not in active_chats:
         await update.message.reply_text(
-            "Вы не в чате. Используйте /search для поиска собеседника."
+            "Вы не в чате. Используйте кнопку ниже для поиска собеседника."
         )
         return
 
@@ -341,10 +341,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
 
     if user_id not in active_chats:
-        await update.message.reply_text(
-            "Вы не в чате. Используйте /search для поиска собеседника.",
-            reply_markup=get_keyboard()  # Клавиатура для начала поиска
-        )
+        # Обработка кнопок "Начать поиск собеседника" и "Остановить поиск"
+        if update.message.text == "Начать поиск собеседника":
+            await search(update, context)
+        elif update.message.text == "Остановить поиск":
+            await stop_search(update, context)
+        else:
+            await update.message.reply_text(
+                "Вы не в чате. Используйте кнопку ниже для поиска собеседника.",
+                reply_markup=get_keyboard()  # Клавиатура для начала поиска
+            )
         return
 
     other_user_id = active_chats[user_id]["chat_with"]
@@ -376,6 +382,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             sent_message = await context.bot.send_message(
                 chat_id=other_user_id,
                 text=update.message.text,
+                entities=update.message.entities,
                 reply_to_message_id=reply_to_message_id,
                 protect_content=True,
             )
@@ -386,6 +393,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 caption=update.message.caption,
                 reply_to_message_id=reply_to_message_id,
                 protect_content=True,
+                caption_entities=update.message.caption_entities,
             )
         elif update.message.video:
             sent_message = await context.bot.send_video(
@@ -394,6 +402,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 caption=update.message.caption,
                 reply_to_message_id=reply_to_message_id,
                 protect_content=True,
+                caption_entities=update.message.caption_entities,
             )
         elif update.message.document:
             sent_message = await context.bot.send_document(
@@ -402,6 +411,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 caption=update.message.caption,
                 reply_to_message_id=reply_to_message_id,
                 protect_content=True,
+                caption_entities=update.message.caption_entities,
             )
         elif update.message.audio:
             sent_message = await context.bot.send_audio(
@@ -410,6 +420,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 caption=update.message.caption,
                 reply_to_message_id=reply_to_message_id,
                 protect_content=True,
+                caption_entities=update.message.caption_entities,
             )
         elif update.message.voice:
             sent_message = await context.bot.send_voice(
@@ -418,6 +429,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 caption=update.message.caption,
                 reply_to_message_id=reply_to_message_id,
                 protect_content=True,
+                caption_entities=update.message.caption_entities,
             )
         elif update.message.sticker:
             sent_message = await context.bot.send_sticker(
@@ -462,7 +474,6 @@ def main():
     application.add_handler(CommandHandler("next", next_command))
     application.add_handler(CommandHandler("stop", stop_chat))
     application.add_handler(CommandHandler("link", link))
-    application.add_handler(CallbackQueryHandler(stop_search, pattern="^stop_search$"))
 
     # Обработчик текстовых сообщений
     application.add_handler(MessageHandler((filters.TEXT | filters.ATTACHMENT) & ~filters.COMMAND, handle_message))
