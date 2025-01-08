@@ -20,16 +20,10 @@
  /link          Отправить ссылку на свой Telegram аккаунт собеседнику 🔗
 ```
 ## 📁 Файлы проекта
-To check if your ISP's DPI could be circumvented, first make sure that your provider does not poison DNS answers by enabling "Secure DNS (DNS over HTTPS)" option in your browser.
+Ниже представлен список всех файлов проекта с подробным описанием их назначения и содержимого:
 
-* **Chrome**: Settings → [Privacy and security](chrome://settings/security) → Use secure DNS → With: NextDNS
-* **Firefox**: [Settings](about:preferences) → Network Settings → Enable DNS over HTTPS → Use provider: NextDNS
-
-Then run the `goodbyedpi.exe` executable without any options. If it works — congratulations! You can use it as-is or configure further, for example by using `--blacklist` option if the list of blocked websites is known and available for your country.
-
-If your provider intercepts DNS requests, you may want to use `--dns-addr` option to a public DNS resolver running on non-standard port (such as Yandex DNS `77.88.8.8:1253`) or configure DNS over HTTPS/TLS using third-party applications.
-
-Check the .cmd scripts and modify it according to your preference and network conditions.
+`bot.py` - Основной код бота.
+`config.py` - Файл, где хранится TOKEN фашего бота.
 
 # How does it work
 
