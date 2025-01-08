@@ -7,10 +7,10 @@ It handles DPI connected using optical splitter or port mirroring (**Passive DPI
 
 **Windows 7, 8, 8.1, 10 or 11** with administrator privileges required.
 
-# Quick start
+# License
 
-* **For Russia**: Download [latest version from Releases page](https://github.com/ValdikSS/GoodbyeDPI/releases), unpack the file and run **1_russia_blacklist_dnsredir.cmd** script.
-* For other countries: Download [latest version from Releases page](https://github.com/ValdikSS/GoodbyeDPI/releases), unpack the file and run **2_any_country_dnsredir.cmd**.
+Этот проект распространяется на условиях лицензии Apache-2.0 license.  
+Полный текст лицензии можно найти в файле [LICENSE.txt](./LICENSE.txt)
 
 These scripts launch GoodbyeDPI in recommended mode with DNS resolver redirection to Yandex DNS on non-standard port (to prevent DNS poisoning).  
 If it works — congratulations! You can use it as-is or configure further.
