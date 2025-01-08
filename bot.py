@@ -152,6 +152,11 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         users[user_id] = {"status": "normal", "chat_with": None}
         save_data(users)
 
+    # Проверка, если пользователь уже в чате
+    if users[user_id]["status"] == "chatting":
+        await update.message.reply_text("Вы уже в чате. Завершите текущий чат перед тем, как начать новый.", reply_markup=get_keyboard())
+        return
+
     if users[user_id]["status"] == "in search":
         await update.message.reply_text("Вы уже ищете собеседника.", reply_markup=get_keyboard(True))
         return
