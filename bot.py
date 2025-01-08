@@ -1,7 +1,6 @@
 import telegram
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
-from telegram.ext import ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from telegram.constants import ParseMode
 from datetime import datetime, timedelta
 import logging
@@ -9,6 +8,7 @@ import json
 from cryptography.fernet import Fernet
 from config import TOKEN
 import os
+import re
 
 # Установка уровеня логирования: (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 logging.basicConfig(level=logging.INFO)
@@ -245,6 +245,34 @@ async def stop_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=get_keyboard(),
     )
 
+async def link(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+
+    if user_id not in active_chats:
+        await update.message.reply_text(
+            "Вы не в чате. Используйте /search для поиска собеседника."
+        )
+        return
+
+    other_user_id = active_chats[user_id]["chat_with"]
+
+    if not update.effective_user.username:
+        await update.message.reply_text(
+            "Ваше имя пользователя скрыто настройками конфиденциальности. Измените настройки, чтобы делиться аккаунтом."
+        )
+        return
+
+    # Отправляем собеседнику ссылку на профиль
+    try:
+        await context.bot.send_message(
+            chat_id=other_user_id,
+            text=f"Ваш собеседник отправил ссылку на свой профиль: @{update.effective_user.username}"
+        )
+        await update.message.reply_text("Ссылка на ваш профиль отправлена собеседнику.")
+    except Exception as e:
+        logging.error(f"Ошибка при отправке ссылки: {e}")
+        await update.message.reply_text("Произошла ошибка при отправке ссылки.")
+
 # Обработчик текста сообщений с обновлением маппинга сообщений в active_chats.json
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
@@ -257,6 +285,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     other_user_id = active_chats[user_id]["chat_with"]
+    text = update.message.text
+
+    # Блокировка упоминаний (@username) вне команды /link
+    if "@" in text and not text.startswith("/link"):
+        await update.message.reply_text("Отправка упоминаний запрещена. Используйте /link.")
+        return
+
+    # Блокировка ссылок (включая обфусцированные ссылки с пробелами)
+    if re.search(r"(https?://|www\.[a-zA-Z]|[a-zA-Z]\.[a-z]{2,})", text.replace(" ", "")):
+        await update.message.reply_text("Отправка ссылок запрещена.")
+        return
 
     try:
         reply_to_message_id = None
@@ -358,6 +397,7 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("search", search))
     application.add_handler(CommandHandler("stop", stop_chat))
+    application.add_handler(CommandHandler("link", link))
     application.add_handler(CallbackQueryHandler(stop_search, pattern="^stop_search$"))
 
     # Обработчик текстовых сообщений
