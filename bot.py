@@ -188,10 +188,10 @@ blocked_users = load_blocked_users()
 def get_keyboard(is_searching=False):
     buttons = []
     if not is_searching:
-        buttons.append([KeyboardButton("Начать поиск собеседника")])
-        buttons.append([KeyboardButton("Интересы")])
+        buttons.append([KeyboardButton("🔎 Поиск собеседника")])
+        buttons.append([KeyboardButton("📙 Интересы")])
     else:
-        buttons.append([KeyboardButton("Остановить поиск")])
+        buttons.append([KeyboardButton("❌ Остановить поиск")])
     return ReplyKeyboardMarkup(buttons, resize_keyboard=True)
 
 # Функция создания клавиатуры для выбора интересов
@@ -218,7 +218,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         users[user_id] = {"status": "normal", "chat_with": None, "interests": []}
         save_data(users)
     if users[user_id]["status"] == "chatting":
-        await update.message.reply_text("Вы уже в чате. Завершите текущий чат перед тем, как начать новый.")
+        await update.message.reply_text(
+            "🥷 *У вас уже есть собеседник*\n\n/next — _искать нового собеседника_\n/stop — _завершить диалог_",
+            parse_mode=ParseMode.MARKDOWN
+            )
         return
     await update.message.reply_text(
         "Добро пожаловать! Используйте кнопку ниже для поиска собеседника.", 
@@ -230,7 +233,8 @@ async def interests(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     selected_interests = users[user_id].get("interests", [])
     await update.message.reply_text(
-        "Выберите ваши интересы:",
+        "_Мы будем стараться искать вам собеседника с похожими интересами._\n\n_Выберите ваши интересы:_",
+        parse_mode=ParseMode.MARKDOWN,
         reply_markup=get_interests_keyboard(selected_interests)
     )
 
@@ -297,12 +301,19 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE, skip_search
 
     # Проверка, заблокирован ли пользователь
     if users[user_id]["status"] == "banned":
-        await update.message.reply_text("Вы были заблокированы администратором.")
+        await update.message.reply_text(
+            "⚠️ *Невозможно начать поиск*\n\nВы были заблокированы администратором.",
+            parse_mode=ParseMode.MARKDOWN
+        )
         return
 
     # Проверка, находится ли пользователь в чате
     if users[user_id]["status"] == "chatting":
-        await update.message.reply_text("Вы уже в чате. Завершите текущий чат перед тем, как начать новый.", reply_markup=get_keyboard())
+        await update.message.reply_text(
+            "🥷 *У вас уже есть собеседник*\n\n/next — _искать нового собеседника_\n/stop — _завершить диалог_",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=ReplyKeyboardRemove()
+        )
         return
 
     # Проверка, ищет ли пользователь собеседника
@@ -316,7 +327,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE, skip_search
     users[user_id]["status"] = "in search"
     save_data(users)
     if not skip_searching_message:
-        await update.message.reply_text("Ищу собеседника...", reply_markup=get_keyboard(True))
+        await update.message.reply_text("_Ищем собеседника..._", parse_mode=ParseMode.MARKDOWN, reply_markup=get_keyboard(True))
 
     user_interests = set(users[user_id].get("interests", []))
     for other_user in users:
@@ -341,23 +352,33 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE, skip_search
             logging.info(f"(!) Создан активный чат между пользователем {user_id} и пользователем {other_user}. (!)")
 
             if common_interests:
-                common_interests_str = ", ".join(common_interests).upper()
-                await update.message.reply_text(f"Собеседник найден! Общие интересы: {common_interests_str}", reply_markup=ReplyKeyboardRemove())
+                common_interests_str = ", ".join(common_interests)
+                await update.message.reply_text(
+                    f"*🔎 Собеседник найден!*\n\n_Общие интересы: {common_interests_str}_\n\n/next — _искать нового собеседника_\n/stop — _завершить диалог_\n/interests — _изменить интересы поиска_",
+                    parse_mode=ParseMode.MARKDOWN,
+                    reply_markup=ReplyKeyboardRemove()
+                )
                 await context.bot.send_message(
                     other_user,
-                    f"Собеседник найден! Общие интересы: {common_interests_str}",
+                    f"*🔎 Собеседник найден!*\n\n_Общие интересы: {common_interests_str}_\n\n/next — _искать нового собеседника_\n/stop — _завершить диалог_\n/interests — _изменить интересы поиска_",
+                    parse_mode=ParseMode.MARKDOWN,
                     reply_markup=ReplyKeyboardRemove(),
                 )
             else:
-                await update.message.reply_text("Собеседник найден!", reply_markup=ReplyKeyboardRemove())
+                await update.message.reply_text(
+                    "*🔎 Собеседник найден!*\n\n/next — _искать нового собеседника_\n/stop — _завершить диалог_\n/interests — _изменить интересы поиска_",
+                    parse_mode=ParseMode.MARKDOWN,
+                    reply_markup=ReplyKeyboardRemove()
+                )
                 await context.bot.send_message(
                     other_user,
-                    "Собеседник найден!",
+                    "*🔎 Собеседник найден!*\n\n/next — _искать нового собеседника_\n/stop — _завершить диалог_\n/interests — _изменить интересы поиска_",
+                    parse_mode=ParseMode.MARKDOWN,
                     reply_markup=ReplyKeyboardRemove(),
                 )
             return
 
-    await update.message.reply_text("Свободных собеседников нет.\n\nПоиск займет больше времени, чем обычно...")
+    #await update.message.reply_text("Свободных собеседников нет.\n\nПоиск займет больше времени, чем обычно...")
 
 # Остановка поиска
 async def stop_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -368,15 +389,16 @@ async def stop_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logging.info(f"(!) Пользователь {user_id} остановил поиск собеседника. (!)")
     users[user_id]["status"] = "normal"
     save_data(users)
-    await update.message.reply_text("Поиск остановлен.", reply_markup=get_keyboard(False))
+    await update.message.reply_text("_Поиск остановлен_", parse_mode=ParseMode.MARKDOWN, reply_markup=get_keyboard(False))
 
 # Команда /next
 async def next_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     if user_id not in active_chats:
         await update.message.reply_text(
-            "Вы не в чате. Используйте кнопку ниже для поиска собеседника.",
-            reply_markup=get_keyboard(),
+            "🚫 *Данную команду можно использовать только в чате!*\n\n/search — _искать нового собеседника_\n/interests — _изменить интересы поиска_",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=get_keyboard()
         )
         return
     other_user = active_chats[user_id]["chat_with"]
@@ -409,7 +431,8 @@ async def next_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await context.bot.send_message(
             other_user,
-            "Ваш собеседник завершил диалог. Используйте кнопку ниже для поиска нового собеседника.",
+            "🛑 *Ваш собеседник завершил чат*\n\n/search — _искать нового собеседника_\n/interests — _изменить интересы поиска_",
+            parse_mode=ParseMode.MARKDOWN,
             reply_markup=get_keyboard(),
         )
     except Exception as e:
@@ -419,7 +442,8 @@ async def next_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users[user_id]["chat_with"] = None
     save_data(users)
     await update.message.reply_text(
-        "Текущий чат завершен. Ищу нового собеседника...",
+        "_Текущий чат завершен. Ищем нового собеседника..._",
+        parse_mode=ParseMode.MARKDOWN,
         reply_markup=get_keyboard(True),
     )
     await search(update, context, skip_searching_message=True)
@@ -428,7 +452,10 @@ async def next_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def stop_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     if user_id not in active_chats:
-        await update.message.reply_text("Вы не в чате. Используйте кнопку ниже для поиска собеседника.", reply_markup=get_keyboard())
+        await update.message.reply_text(
+            "🚫 *Данную команду можно использовать только в чате!*\n\n/search — _искать нового собеседника_\n/interests — _изменить интересы поиска_",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=get_keyboard())
         return
     other_user = active_chats[user_id]["chat_with"]
     del active_chats[user_id]
@@ -461,10 +488,15 @@ async def stop_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_data(users)
     logging.info(f"(!) Чат между пользователем {user_id} и пользователем {other_user} завершен, они занесены в блок на {timeout_duration}. (!)")
 
-    await update.message.reply_text("Вы покинули чат. Используйте кнопку ниже для нового собеседника.", reply_markup=get_keyboard())
+    await update.message.reply_text(
+        "🛑 *Вы завершили чат с собеседником*\n\n/search — _искать нового собеседника_\n/interests — _изменить интересы поиска_",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=get_keyboard()
+    )
     await context.bot.send_message(
         other_user,
-        "Ваш собеседник покинул чат. Используйте кнопку ниже для нового собеседника.",
+        "🛑 *Ваш собеседник завершил чат*\n\n/search — _искать нового собеседника_\n/interests — _изменить интересы поиска_",
+        parse_mode=ParseMode.MARKDOWN,
         reply_markup=get_keyboard(),
     )
 
@@ -472,7 +504,9 @@ async def stop_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     if user_id not in active_chats:
-        await update.message.reply_text("Вы не в чате. Используйте кнопку ниже для поиска собеседника.")
+        await update.message.reply_text(
+            "🚫 *Данную команду можно использовать только в чате!*\n\n/search — _искать нового собеседника_\n/interests — _изменить интересы поиска_",
+            parse_mode=ParseMode.MARKDOWN)
         return
     other_user_id = active_chats[user_id]["chat_with"]
     if not update.effective_user.username:
@@ -492,14 +526,17 @@ async def link(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     if user_id not in active_chats:
-        if update.message.text == "Начать поиск собеседника":
+        if update.message.text == "🔎 Поиск собеседника":
             await search(update, context)
-        elif update.message.text == "Остановить поиск":
+        elif update.message.text == "❌ Остановить поиск":
             await stop_search(update, context)
-        elif update.message.text == "Интересы":
+        elif update.message.text == "📙 Интересы":
             await interests(update, context)
         else:
-            await update.message.reply_text("Вы не в чате. Используйте кнопку ниже для поиска собеседника.", reply_markup=get_keyboard())
+            await update.message.reply_text(
+                "🚫 *Данную команду можно использовать только в чате!*\n\n/search — _искать нового собеседника_\n/interests — _изменить интересы поиска_",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=get_keyboard())
         return
 
     other_user_id = active_chats[user_id]["chat_with"]
@@ -677,6 +714,35 @@ async def unban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_data(users)
     await update.message.reply_text(f"Пользователь с id {target_id} разблокирован.")
 
+# Обработка команды /stats
+async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        # Если пользователь не администратор, ничего не отвечаем
+        return
+
+    # Загрузка данных
+    users = load_data()
+    active_chats = load_active_chats()
+    blocked_users = load_blocked_users()
+
+    total_users = len(users)
+    active_chats_count = len(active_chats)
+    blocked_users_count = sum(1 for user in users.values() if user["status"] == "banned")
+    timeout_users_count = sum(1 for pair, block_time in blocked_users.items() if block_time != "timeout_duration")
+    searching_users_count = sum(1 for user in users.values() if user["status"] == "in search")
+
+    stats_message = (
+        f"*📊 Статистика бота*\n\n"
+        f"👥 Общее количество пользователей: {total_users}\n"
+        f"💬 Количество активных чатов: {active_chats_count}\n"
+        f"🔍 Пользователи в поиске: {searching_users_count}\n"
+        f"⏳ Пользователи в тайм-ауте: {timeout_users_count}\n"
+        f"🚫 Заблокированные пользователи: {blocked_users_count}"
+    )
+
+    await update.message.reply_text(stats_message, parse_mode=ParseMode.MARKDOWN)
+
 # Команда /debug
 async def debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -710,10 +776,11 @@ def main():
     application.add_handler(CommandHandler("link", link))
     application.add_handler(CommandHandler("interests", interests_command))
     application.add_handler(CommandHandler("debug", debug_command))
-    application.add_handler(CommandHandler("ban", ban_command))  # Добавлен обработчик команды /ban
-    application.add_handler(CommandHandler("unban", unban_command))  # Добавлен обработчик команды /unban
-    application.add_handler(CommandHandler("getid", getid_command))  # Добавлен обработчик команды /getid
-    application.add_handler(CommandHandler("timeout", timeout_command))  # Добавлен обработчик команды /timeout
+    application.add_handler(CommandHandler("ban", ban_command))
+    application.add_handler(CommandHandler("unban", unban_command))
+    application.add_handler(CommandHandler("getid", getid_command))
+    application.add_handler(CommandHandler("timeout", timeout_command))
+    application.add_handler(CommandHandler("stats", stats_command))  # Добавлен обработчик команды /stats
     application.add_handler(CallbackQueryHandler(handle_interests, pattern="^interest_"))
     application.add_handler(CallbackQueryHandler(done, pattern="^done$"))
     application.add_handler(CallbackQueryHandler(reset_interests, pattern="^reset_interests$"))
