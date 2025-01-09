@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import logging
 import json
 from cryptography.fernet import Fernet
-from config import TOKEN
+from config import TOKEN, ADMIN_ID
 import os
 import re
 
@@ -101,19 +101,88 @@ def save_blocked_users(blocked_users):
 def load_blocked_users():
     return load_encrypted_file('blocked_users.json')
 
-# Проверка блокировки пользователей
+# Изменение функции is_blocked для проверки тайм-аутов
 def is_blocked(user1, user2):
     blocked_users = load_blocked_users()
     pair = ",".join(sorted([user1, user2]))
     if pair in blocked_users:
         block_time = datetime.fromisoformat(blocked_users[pair])
-        if datetime.now() - block_time < timedelta(hours=1):
+        if datetime.now() < block_time:
             return True
+        else:
+            # Удаляем просроченные блокировки и логируем выход из тайм-аута
+            del blocked_users[pair]
+            save_blocked_users(blocked_users)
+            logging.info(f"(!) Пользователи {user1} и {user2} вышли из тайм-аута.")
     return False
+
+# Преобразование времени в слова
+def convert_timeout_to_words(timeout_str):
+    time_amount = int(timeout_str[:-1])
+    time_unit = timeout_str[-1]
+
+    if time_unit == 's':
+        return f"{time_amount} сек"
+    elif time_unit == 'm':
+        return f"{time_amount} мин"
+    elif time_unit == 'h':
+        return f"{time_amount} час"
+    elif time_unit == 'd':
+        return f"{time_amount} день"
+
+# Обработка команды /timeout
+async def timeout_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        # Если пользователь не администратор, ничего не отвечаем
+        return
+
+    if len(context.args) == 0:
+        # Подгружаем актуальный тайм-аут из blocked_users.json
+        blocked_users = load_blocked_users()
+        last_timeout = blocked_users.get("timeout_duration", "1h")
+        last_timeout_words = convert_timeout_to_words(last_timeout)
+        await update.message.reply_text(f"Используйте команду в формате: /timeout <время>\nТекущий установленный тайм-аут: {last_timeout_words}")
+        return
+
+    if len(context.args) != 1:
+        await update.message.reply_text("Некорректный формат команды. Используйте команду в формате: /timeout <время>")
+        return
+
+    timeout_str = context.args[0]
+    if not re.match(r'^\d+[smhd]$', timeout_str):
+        await update.message.reply_text("Некорректный формат времени. Используйте s для секунд, m для минут, h для часов или d для дней. Например: /timeout 30с, /timeout 1м, /timeout 1ч, /timeout 1д")
+        return
+
+    time_amount = int(timeout_str[:-1])
+    time_unit = timeout_str[-1]
+
+    if time_unit == 's':
+        timeout_duration = timedelta(seconds=time_amount)
+    elif time_unit == 'm':
+        timeout_duration = timedelta(minutes=time_amount)
+    elif time_unit == 'h':
+        timeout_duration = timedelta(hours=time_amount)
+    elif time_unit == 'd':
+        timeout_duration = timedelta(days=time_amount)
+    else:
+        await update.message.reply_text("Некорректный формат времени. Используйте s для секунд, m для минут, h для часов или d для дней.")
+        return
+
+    if timeout_duration > timedelta(days=1):
+        await update.message.reply_text(f"Время {timeout_duration} слишком большое для тайм-аута, но оно будет установлено.")
+
+    blocked_users = load_blocked_users()
+    blocked_users["timeout_duration"] = timeout_str
+    save_blocked_users(blocked_users)
+    context.bot_data["last_timeout"] = timeout_str
+    timeout_words = convert_timeout_to_words(timeout_str)
+    await update.message.reply_text(f"Тайм-аут установлен на {timeout_words}.")
 
 # Загрузка данных
 users = load_data()
 active_chats = load_active_chats()
+blocked_users = load_blocked_users()
 
 # Исправление функции создания клавиатуры
 def get_keyboard(is_searching=False):
@@ -217,15 +286,26 @@ async def done(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await query.message.reply_text("Интересы выбраны.", reply_markup=get_keyboard())
 
-# Обновление функции search для скрытия кнопки "Интересы" при начале поиска
+# Команда /search
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE, skip_searching_message=False):
     user_id = str(update.effective_user.id)
+
+    # Проверка наличия пользователя в базе данных
     if user_id not in users:
         users[user_id] = {"status": "normal", "chat_with": None, "interests": []}
         save_data(users)
+
+    # Проверка, заблокирован ли пользователь
+    if users[user_id]["status"] == "banned":
+        await update.message.reply_text("Вы были заблокированы администратором.")
+        return
+
+    # Проверка, находится ли пользователь в чате
     if users[user_id]["status"] == "chatting":
         await update.message.reply_text("Вы уже в чате. Завершите текущий чат перед тем, как начать новый.", reply_markup=get_keyboard())
         return
+
+    # Проверка, ищет ли пользователь собеседника
     if users[user_id]["status"] == "in search":
         if not skip_searching_message:
             await update.message.reply_text("Вы уже ищете собеседника.", reply_markup=get_keyboard(True))
@@ -246,7 +326,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE, skip_search
             other_user_interests = set(users[other_user].get("interests", []))
             common_interests = user_interests & other_user_interests
             # Проверка, чтобы пользователи без интересов соединялись только с такими же пользователями
-            if (not user_interests and other_user_interests) or (user_interests and not other_user_interests) or (common_interests and not user_interests and not other_user_interests):
+            if (not user_interests and other_user_interests) or (user_interests and not other_user_interests) or (not common_interests and user_interests):
                 continue
 
             users[user_id]["chat_with"] = other_user
@@ -302,9 +382,25 @@ async def next_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     other_user = active_chats[user_id]["chat_with"]
     del active_chats[user_id]
     del active_chats[other_user]
+
     blocked_users = load_blocked_users()
+    timeout_str = blocked_users.get("timeout_duration", "1h")
+    time_amount = int(timeout_str[:-1])
+    time_unit = timeout_str[-1]
+    
+    if time_unit == 's':
+        timeout_duration = timedelta(seconds=time_amount)
+    elif time_unit == 'm':
+        timeout_duration = timedelta(minutes=time_amount)
+    elif time_unit == 'h':
+        timeout_duration = timedelta(hours=time_amount)
+    elif time_unit == 'd':
+        timeout_duration = timedelta(days=time_amount)
+    
+    now = datetime.now()
     pair = ",".join(sorted([user_id, other_user]))
-    blocked_users[pair] = str(datetime.now())
+    blocked_users[pair] = (now + timeout_duration).isoformat()
+    
     save_blocked_users(blocked_users)
     save_active_chats()
     users[other_user]["status"] = "normal"
@@ -337,9 +433,25 @@ async def stop_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     other_user = active_chats[user_id]["chat_with"]
     del active_chats[user_id]
     del active_chats[other_user]
+
     blocked_users = load_blocked_users()
+    timeout_str = blocked_users.get("timeout_duration", "1h")
+    time_amount = int(timeout_str[:-1])
+    time_unit = timeout_str[-1]
+    
+    if time_unit == 's':
+        timeout_duration = timedelta(seconds=time_amount)
+    elif time_unit == 'm':
+        timeout_duration = timedelta(minutes=time_amount)
+    elif time_unit == 'h':
+        timeout_duration = timedelta(hours=time_amount)
+    elif time_unit == 'd':
+        timeout_duration = timedelta(days=time_amount)
+    
+    now = datetime.now()
     pair = ",".join(sorted([user_id, other_user]))
-    blocked_users[pair] = str(datetime.now())
+    blocked_users[pair] = (now + timeout_duration).isoformat()
+    
     save_blocked_users(blocked_users)
     save_active_chats()
     users[user_id]["status"] = "normal"
@@ -347,7 +459,8 @@ async def stop_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users[user_id]["chat_with"] = None
     users[other_user]["chat_with"] = None
     save_data(users)
-    logging.info(f"(!) Чат между пользователем {user_id} и пользователем {other_user} завершен, они занесены в блок на 1 час. (!)")
+    logging.info(f"(!) Чат между пользователем {user_id} и пользователем {other_user} завершен, они занесены в блок на {timeout_duration}. (!)")
+
     await update.message.reply_text("Вы покинули чат. Используйте кнопку ниже для нового собеседника.", reply_markup=get_keyboard())
     await context.bot.send_message(
         other_user,
@@ -490,22 +603,130 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"Ошибка при обработке сообщения: {e}")
         await update.message.reply_text("Произошла ошибка при пересылке сообщения.")
 
+# Команда /ban
+async def ban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        # Если пользователь не администратор, ничего не отвечаем
+        return
+
+    if len(context.args) != 1:
+        await update.message.reply_text("Используйте команду в формате: /ban <id пользователя>")
+        return
+
+    target_id = context.args[0]
+    if target_id not in users:
+        await update.message.reply_text(f"Пользователь с id {target_id} не найден.")
+        return
+
+    users[target_id]["status"] = "banned"
+    save_data(users)
+
+    if target_id in active_chats:
+        chat_with_id = active_chats[target_id]["chat_with"]
+        del active_chats[target_id]
+        del active_chats[chat_with_id]
+        save_active_chats()
+        await context.bot.send_message(
+            chat_with_id,
+            "Пользователь, с которым вы общались, был заблокирован администратором. Чат завершен.",
+            reply_markup=get_keyboard()
+        )
+        await context.bot.send_message(
+            target_id,
+            "Вы были заблокированы администратором. Чат завершен.",
+            reply_markup=get_keyboard()
+        )
+        # Присваиваем статус "normal" собеседнику заблокированного пользователя
+        users[chat_with_id]["status"] = "normal"
+        save_data(users)
+
+    await update.message.reply_text(f"Пользователь с id {target_id} заблокирован.")
+
+# Команда /getid
+async def getid_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)  # Приведение user_id к строке
+    if user_id != str(ADMIN_ID):  # Приведение ADMIN_ID к строке для сравнения
+        # Если пользователь не администратор, ничего не отвечаем
+        return
+
+    if user_id not in active_chats:
+        await update.message.reply_text("Вы не находитесь в чате.")
+        return
+
+    chat_with_id = active_chats[user_id]["chat_with"]
+    await update.message.reply_text(f"ID собеседника: {chat_with_id}")
+
+# Команда /unban
+async def unban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        # Если пользователь не администратор, ничего не отвечаем
+        return
+
+    if len(context.args) != 1:
+        await update.message.reply_text("Используйте команду в формате: /unban <id пользователя>")
+        return
+
+    target_id = context.args[0]
+    if target_id not in users:
+        await update.message.reply_text(f"Пользователь с id {target_id} не найден.")
+        return
+
+    users[target_id]["status"] = "normal"
+    save_data(users)
+    await update.message.reply_text(f"Пользователь с id {target_id} разблокирован.")
+
+# Команда /debug
+async def debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        # Если пользователь не администратор, ничего не отвечаем
+        return
+    
+    # Устанавливаем статус всех пользователей на "normal", кроме заблокированных
+    for user in users:
+        if users[user]["status"] != "banned":
+            users[user]["status"] = "normal"
+    
+    # Сохраняем изменения в users.json
+    save_data(users)
+    
+    # Очищаем active_chats.json
+    active_chats.clear()
+    save_active_chats()
+
+    await update.message.reply_text("Дебаг успешно прошёл. Все пользователи сброшены в 'normal', активные чаты очищены.")
+
 # Основная функция
 def main():
     application = Application.builder().token(TOKEN).build()
 
+    # Добавление обработчиков команд
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("search", search))
     application.add_handler(CommandHandler("next", next_command))
     application.add_handler(CommandHandler("stop", stop_chat))
     application.add_handler(CommandHandler("link", link))
-    application.add_handler(CommandHandler("interests", interests_command))  # Добавлен обработчик команды /interests
+    application.add_handler(CommandHandler("interests", interests_command))
+    application.add_handler(CommandHandler("debug", debug_command))
+    application.add_handler(CommandHandler("ban", ban_command))  # Добавлен обработчик команды /ban
+    application.add_handler(CommandHandler("unban", unban_command))  # Добавлен обработчик команды /unban
+    application.add_handler(CommandHandler("getid", getid_command))  # Добавлен обработчик команды /getid
+    application.add_handler(CommandHandler("timeout", timeout_command))  # Добавлен обработчик команды /timeout
     application.add_handler(CallbackQueryHandler(handle_interests, pattern="^interest_"))
     application.add_handler(CallbackQueryHandler(done, pattern="^done$"))
-    application.add_handler(CallbackQueryHandler(reset_interests, pattern="^reset_interests$"))  # Добавлен обработчик сброса интересов
+    application.add_handler(CallbackQueryHandler(reset_interests, pattern="^reset_interests$"))
 
     # Обработчик текстовых сообщений
     application.add_handler(MessageHandler((filters.TEXT | filters.ATTACHMENT) & ~filters.COMMAND, handle_message))
+
+    # Сохранение текущего тайм-аута в контекст бота при запуске
+    blocked_users = load_blocked_users()
+    if "timeout_duration" in blocked_users:
+        application.bot_data["last_timeout"] = blocked_users["timeout_duration"]
+    else:
+        application.bot_data["last_timeout"] = "1h"
 
     application.run_polling()
 
