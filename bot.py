@@ -142,16 +142,16 @@ async def timeout_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         blocked_users = load_blocked_users()
         last_timeout = blocked_users.get("timeout_duration", "1h")
         last_timeout_words = convert_timeout_to_words(last_timeout)
-        await update.message.reply_text(f"Используйте команду в формате: /timeout <время>\nТекущий установленный тайм-аут: {last_timeout_words}")
+        await update.message.reply_text(f"_Используйте команду в формате: /timeout <время>\nТекущий установленный тайм-аут: {last_timeout_words}_", parse_mode=ParseMode.MARKDOWN)
         return
 
     if len(context.args) != 1:
-        await update.message.reply_text("Некорректный формат команды. Используйте команду в формате: /timeout <время>")
+        await update.message.reply_text("_Некорректный формат команды. Используйте команду в формате: /timeout <время>_", parse_mode=ParseMode.MARKDOWN)
         return
 
     timeout_str = context.args[0]
     if not re.match(r'^\d+[smhd]$', timeout_str):
-        await update.message.reply_text("Некорректный формат времени. Используйте s для секунд, m для минут, h для часов или d для дней. Например: /timeout 30с, /timeout 1м, /timeout 1ч, /timeout 1д")
+        await update.message.reply_text("_Некорректный формат времени. Используйте s для секунд, m для минут, h для часов или d для дней_\n_Например: /timeout 30с, /timeout 1м, /timeout 1ч, /timeout 1д_", parse_mode=ParseMode.MARKDOWN)
         return
 
     time_amount = int(timeout_str[:-1])
@@ -166,18 +166,18 @@ async def timeout_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif time_unit == 'd':
         timeout_duration = timedelta(days=time_amount)
     else:
-        await update.message.reply_text("Некорректный формат времени. Используйте s для секунд, m для минут, h для часов или d для дней.")
+        await update.message.reply_text("_Некорректный формат времени. Используйте s для секунд, m для минут, h для часов или d для дней_", parse_mode=ParseMode.MARKDOWN)
         return
 
     if timeout_duration > timedelta(days=1):
-        await update.message.reply_text(f"Время {timeout_duration} слишком большое для тайм-аута, но оно будет установлено.")
+        await update.message.reply_text(f"_Мы не советуем устанавливать настолько долгий тайм-аут_", parse_mode=ParseMode.MARKDOWN)
 
     blocked_users = load_blocked_users()
     blocked_users["timeout_duration"] = timeout_str
     save_blocked_users(blocked_users)
     context.bot_data["last_timeout"] = timeout_str
     timeout_words = convert_timeout_to_words(timeout_str)
-    await update.message.reply_text(f"Тайм-аут установлен на {timeout_words}.")
+    await update.message.reply_text(f"*⏳ Тайм-аут установлен на {timeout_words}*", parse_mode=ParseMode.MARKDOWN)
 
 # Загрузка данных
 users = load_data()
@@ -1026,7 +1026,13 @@ async def debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     active_chats.clear()
     save_active_chats()
 
-    await update.message.reply_text("Дебаг успешно прошёл. Все пользователи сброшены в 'normal', активные чаты очищены.")
+    # Очищаем заблокированных пользователей, но оставляем timeout_duration
+    blocked_users = load_blocked_users()
+    timeout_duration = blocked_users.get("timeout_duration", "1h")
+    blocked_users = {"timeout_duration": timeout_duration}
+    save_blocked_users(blocked_users)
+
+    await update.message.reply_text("Дебаг успешно прошёл. Все пользователи сброшены в 'normal', активные чаты очищены, заблокированные пользователи удалены.")
 
 # Основная функция
 def main():
