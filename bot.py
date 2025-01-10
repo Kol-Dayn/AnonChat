@@ -189,12 +189,58 @@ def get_keyboard(is_searching=False):
     buttons = []
     if not is_searching:
         buttons.append([KeyboardButton("🔎 Поиск собеседника")])
-        buttons.append([KeyboardButton("Поиск по полу")])
+        buttons.append([KeyboardButton("🎭 Поиск по полу")])
         buttons.append([KeyboardButton("📙 Интересы")])
-        buttons.append([KeyboardButton("Настройки пола")])
+        buttons.append([KeyboardButton("💅 Настройки пола")])
     else:
         buttons.append([KeyboardButton("❌ Остановить поиск")])
     return ReplyKeyboardMarkup(buttons, resize_keyboard=True)
+
+# ПОЛУЧЕНИЕ file_id фото
+# async def get_file_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+#     if update.message.photo:
+#         file_id = update.message.photo[-1].file_id
+#         await update.message.reply_text(f"file_id: {file_id}")
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+    if user_id not in users:
+        users[user_id] = {"status": "normal", "chat_with": None, "interests": [], "gender": None, "premium": False}
+        save_data(users)
+    if users[user_id]["status"] == "chatting":
+        await update.message.reply_text(
+            "🥷 *У вас уже есть собеседник*\n\n/next — _искать нового собеседника_\n/stop — _завершить диалог_",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+    if users[user_id]["status"] == "in search":
+        await update.message.reply_text(
+            "_Мы уже ищем собеседника..._",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+    
+    # Замените 'YOUR_PHOTO_FILE_ID' на действительный file_id вашего фото
+    photo_file_id = 'AgACAgIAAxkBAAIq72eBGj6uFSeSE1dKa1zxAsS5LbWdAAKN6DEb45v5S1f--cKVyg-zAQADAgADeAADNgQ'
+    
+    # Создаем inline-кнопку
+    inline_button = InlineKeyboardButton("Автор проекта", url="https://t.me/ibuzy")
+    inline_keyboard = InlineKeyboardMarkup([[inline_button]])
+
+    await context.bot.send_photo(
+        chat_id=update.effective_chat.id,
+        photo=photo_file_id,
+        caption="*👋 Добро пожаловать в Анонимный чат для общения 1 на 1 со случайным собеседником!*\n\n*🛡 Шифрование данных*\n*🎭 Полная анонимность*\n*📙 Интересы для общения*\n*💅 Поиск собеседника полу*\n\n_Просим вас соблюдать правила этикета и придерживаться уважительного и доброжелательного тона в общении в чате._",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=inline_keyboard  # Добавляем inline-клавиатуру
+    )
+
+    # Отправляем обычную клавиатуру
+    await update.message.reply_text(
+        "_💭 Для поиска собеседника воспользуйтесь кнопками ниже_",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=get_keyboard()
+    )
 
 # Функция создания клавиатуры для выбора интересов
 def get_interests_keyboard(selected_interests=[]):
@@ -213,42 +259,13 @@ def get_interests_keyboard(selected_interests=[]):
     buttons.append([InlineKeyboardButton("❌ Сбросить интересы", callback_data="reset_interests")])
     return InlineKeyboardMarkup(buttons)
 
-# Стартовое сообщение
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-    if user_id not in users:
-        users[user_id] = {"status": "normal", "chat_with": None, "interests": [], "gender": None, "premium": False}
-        save_data(users)
-    if users[user_id]["status"] == "chatting":
-        await update.message.reply_text(
-            "🥷 *У вас уже есть собеседник*\n\n/next — _искать нового собеседника_\n/stop — _завершить диалог_",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        return
-    await update.message.reply_text(
-        "Добро пожаловать! Используйте кнопку ниже для поиска собеседника.",
-        reply_markup=get_keyboard()
-    )
-
-# Обработчик для кнопки "Интересы"
-async def interests(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-    selected_interests = users[user_id].get("interests", [])
-    await update.message.reply_text(
-        "_Мы будем стараться искать вам собеседника с похожими интересами._\n\n_Выберите ваши интересы:_",
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=get_interests_keyboard(selected_interests)
-    )
-
 # Команда /interests
 async def interests_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
-    if users[user_id]["status"] != "normal":
-        await update.message.reply_text("Эту команду можно использовать только когда ваш статус normal.")
-        return
     selected_interests = users[user_id].get("interests", [])
     await update.message.reply_text(
-        "Выберите ваши интересы:",
+        "*📙 Интересы поиска*\n\n_Мы будем стараться искать вам собеседника с похожими интересами._\n\n_Выберите ваши интересы:_",
+        parse_mode=ParseMode.MARKDOWN,
         reply_markup=get_interests_keyboard(selected_interests)
     )
 
@@ -303,7 +320,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE, skip_search
     # Проверка, заблокирован ли пользователь
     if users[user_id]["status"] == "banned":
         await update.message.reply_text(
-            "⚠️ *Невозможно начать поиск*\n\nВы были заблокированы администратором.",
+            "*⚠️ Невозможно начать поиск.*\n\n*Вы были заблокированы администратором.*",
             parse_mode=ParseMode.MARKDOWN
         )
         return
@@ -320,7 +337,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE, skip_search
     # Проверка, ищет ли пользователь собеседника
     if users[user_id]["status"] == "in search":
         if not skip_searching_message:
-            await update.message.reply_text("Вы уже ищете собеседника.", reply_markup=get_keyboard(True))
+            await update.message.reply_text("_Мы уже ищем собеседника..._", parse_mode=ParseMode.MARKDOWN, reply_markup=get_keyboard(True))
         return
 
     logging.info(f"(!) Пользователь {user_id} начал поиск собеседника. (!)")
@@ -405,27 +422,60 @@ async def find_partner(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Обработчик для кнопки "Поиск по полу"
 async def gender_search_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
+    
+    # Проверка, заблокирован ли пользователь
+    if users[user_id]["status"] == "banned":
+        await update.message.reply_text(
+            "*⚠️ Невозможно начать поиск.*\n\n*Вы были заблокированы администратором.*",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+    
     if not users[user_id].get("premium", False):
-        await update.message.reply_text("Для этой функции нужен premium статус.", reply_markup=get_keyboard())
+        photo_file_id = 'AgACAgIAAxkBAAIrPGeBJTFQfZuJnOmUeXkUoemEdU7oAALj5jEbXEMISHAa4jiqR3QuAQADAgADeAADNgQ'
+        
+        # Создаем inline-кнопку "Купить премиум"
+        inline_button = InlineKeyboardButton("Купить премиум", url="https://t.me/ibuzy")
+        inline_keyboard = InlineKeyboardMarkup([[inline_button]])
+
+        await context.bot.send_photo(
+            chat_id=update.effective_chat.id,
+            photo=photo_file_id,
+            caption='_Для функции_ *🎭 Поиск по полу* _нужен Premium статус!_\n_Приобрести Premium можно у администратора_',
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=inline_keyboard
+        )
         return
 
     buttons = [
-        [KeyboardButton("Поиск М"), KeyboardButton("Поиск Ж")],
-        [KeyboardButton("Вернуться назад")]
+        [KeyboardButton("👨‍🦰 Поиск М"), KeyboardButton("👩‍🦱 Поиск Д")],
+        [KeyboardButton("◀️ Вернуться назад")]
     ]
-    await update.message.reply_text("Выберите поиск по полу:", reply_markup=ReplyKeyboardMarkup(buttons, resize_keyboard=True))
+    await update.message.reply_text("_Выберите пол для поиска:_", parse_mode=ParseMode.MARKDOWN, reply_markup=ReplyKeyboardMarkup(buttons, resize_keyboard=True))
 
 # Обработчик для поиска по полу
 async def gender_search(update: Update, context: ContextTypes.DEFAULT_TYPE, skip_searching_message=False):
     user_id = str(update.effective_user.id)
     if not users[user_id].get("premium", False):
-        await update.message.reply_text("Для этой функции нужен premium статус.", reply_markup=get_keyboard())
+        photo_file_id = 'AgACAgIAAxkBAAIrPGeBJTFQfZuJnOmUeXkUoemEdU7oAALj5jEbXEMISHAa4jiqR3QuAQADAgADeAADNgQ'
+        
+        # Создаем inline-кнопку "Купить премиум"
+        inline_button = InlineKeyboardButton("Купить премиум", url="https://t.me/ibuzy")
+        inline_keyboard = InlineKeyboardMarkup([[inline_button]])
+
+        await context.bot.send_photo(
+            chat_id=update.effective_chat.id,
+            photo=photo_file_id,
+            caption='_Для функции_ *🎭 Поиск по полу* _нужен Premium статус!_\n_Приобрести Premium можно у администратора_',
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=inline_keyboard
+        )
         return
 
     gender = None
-    if update.message.text == "Поиск М":
+    if update.message.text == "👨‍🦰 Поиск М":
         gender = "m"
-    elif update.message.text == "Поиск Ж":
+    elif update.message.text == "👩‍🦱 Поиск Д":
         gender = "w"
     else:
         return  # Не отправляем сообщение "Некорректная команда!" и не меняем клавиатуру
@@ -440,27 +490,33 @@ async def gender_search(update: Update, context: ContextTypes.DEFAULT_TYPE, skip
 
     await find_partner(update, context)
 
-# Команда /profile
-async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# Команда /gender
+async def gender_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
-    if users[user_id]["status"] != "normal":
-        await update.message.reply_text("Эту команду можно использовать только когда ваш статус normal.")
-        return
 
     current_gender = users[user_id].get("gender", "не указан")
     if current_gender == "m":
-        current_gender = "мужчина"
+        current_gender_text = "мужчина"
+        current_gender_emoji = "👨‍🦰"
     elif current_gender == "w":
-        current_gender = "женщина"
+        current_gender_text = "девушка"
+        current_gender_emoji = "👩‍🦱"
     else:
-        current_gender = "не указан"
+        current_gender_text = "не указан"
+
+    if current_gender_text == "не указан":
+        message_text = "*💅 Настройки пола*\n\n_Укажите свой пол, что бы поиск по полу находил вам собеседников быстрее._\n\n_У вас не указан пол 👀_" 
+    else:
+        message_text = f"*💅 Настройки пола*\n\n_Укажите свой пол, что бы поиск по полу находил вам собеседников быстрее._\n\n_Текущий пол: {current_gender_text} {current_gender_emoji}_"
 
     buttons = [
-        [InlineKeyboardButton("Я парень", callback_data="set_gender_m")],
-        [InlineKeyboardButton("Я девушка", callback_data="set_gender_w")],
-        [InlineKeyboardButton("Удалить мой пол", callback_data="delete_gender")]
+        [
+            InlineKeyboardButton("👨‍🦰 Я парень", callback_data="set_gender_m"),
+            InlineKeyboardButton("👩‍🦱 Я девушка", callback_data="set_gender_w")
+        ],
+        [InlineKeyboardButton("❌ Удалить мой пол", callback_data="delete_gender")]
     ]
-    await update.message.reply_text(f"Настройки пола (текущий пол: {current_gender}):", reply_markup=InlineKeyboardMarkup(buttons))
+    await update.message.reply_text(message_text, reply_markup=InlineKeyboardMarkup(buttons), parse_mode=ParseMode.MARKDOWN)
 
 
 # Обработчик выбора пола
@@ -485,7 +541,7 @@ async def handle_gender(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def stop_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     if users[user_id]["status"] != "in search":
-        await update.message.reply_text("Вы не в поиске собеседника.", reply_markup=get_keyboard())
+        await update.message.reply_text("_Вы не в поиске собеседника_", parse_mode=ParseMode.MARKDOWN, reply_markup=get_keyboard())
         return
     logging.info(f"(!) Пользователь {user_id} остановил поиск собеседника. (!)")
     users[user_id]["status"] = "normal"
@@ -559,14 +615,14 @@ async def next_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if gender:
             if gender == "m":
                 await update.message.reply_text(
-                    "_Текущий чат завершен. Ищем нового собеседника..._\n_Поиск М..._",
+                    "_Текущий чат завершен. Ищем нового собеседника мужского пола..._",
                     parse_mode=ParseMode.MARKDOWN,
                     reply_markup=get_keyboard(True),
                 )
                 users[user_id]["search_gender"] = "m"
             elif gender == "w":
                 await update.message.reply_text(
-                    "_Текущий чат завершен. Ищем нового собеседника..._\n_Поиск Ж..._",
+                    "_Текущий чат завершен. Ищем нового собеседника женского пола..._",
                     parse_mode=ParseMode.MARKDOWN,
                     reply_markup=get_keyboard(True),
                 )
@@ -662,7 +718,6 @@ async def link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"Ошибка при отправке ссылки: {e}")
         await update.message.reply_text("Произошла ошибка при отправке ссылки.")
 
-# Обработчик сообщений
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     if user_id not in users:
@@ -674,25 +729,29 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif update.message.text == "❌ Остановить поиск":
             await stop_search(update, context)
         elif update.message.text == "📙 Интересы":
-            await interests(update, context)
-        elif update.message.text == "Поиск по полу":
+            await interests_command(update, context)
+        elif update.message.text == "🎭 Поиск по полу":
             await gender_search_menu(update, context)
-        elif update.message.text == "Настройки пола":
-            await profile_command(update, context)
-        elif update.message.text == "Поиск М" or update.message.text == "Поиск Ж":
+        elif update.message.text == "💅 Настройки пола":
+            await gender_command(update, context)
+        elif update.message.text == "👨‍🦰 Поиск М" or update.message.text == "👩‍🦱 Поиск Д":
             await gender_search(update, context)
-        elif update.message.text == "Вернуться назад":
+        elif update.message.text == "◀️ Вернуться назад":
             users[user_id]["status"] = "normal"
             save_data(users)
             await update.message.reply_text(
-                "Вы вернулись в главное меню.",
+                "_Вы вернулись в главное меню_",
+                parse_mode=ParseMode.MARKDOWN,
                 reply_markup=get_keyboard()
             )
         else:
-            await update.message.reply_text(
-                "🚫 *Данную команду можно использовать только в чате!*\n\n/search — _искать нового собеседника_\n/interests — _изменить интересы поиска_",
-                parse_mode=ParseMode.MARKDOWN,
-                reply_markup=get_keyboard())
+            # Проверка, в каком меню находится пользователь
+            if users[user_id].get("search_via_gender", False):
+                reply_markup = get_keyboard(True)
+            elif users[user_id]["status"] == "in search":
+                reply_markup = get_keyboard(True)
+            else:
+                reply_markup = get_keyboard()
         return
 
     other_user_id = active_chats[user_id]["chat_with"]
@@ -804,12 +863,12 @@ async def premium_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if len(context.args) != 1:
-        await update.message.reply_text("Используйте команду в формате: /premium <id пользователя>")
+        await update.message.reply_text("_Используйте команду в формате: /premium <id пользователя>_", parse_mode=ParseMode.MARKDOWN)
         return
 
     target_id = context.args[0]
     if target_id not in users:
-        await update.message.reply_text(f"Пользователь с id {target_id} не найден.")
+        await update.message.reply_text(f"_Пользователь с id {target_id} не найден._", parse_mode=ParseMode.MARKDOWN)
         return
 
     users[target_id]["premium"] = True
@@ -817,9 +876,10 @@ async def premium_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_message(
         chat_id=target_id,
-        text="Вам был выдан premium статус!"
+        text="*👑 Вам был выдан premium статус!*",
+        parse_mode=ParseMode.MARKDOWN,
     )
-    await update.message.reply_text(f"Пользователь с id {target_id} получил premium статус.")
+    await update.message.reply_text(f"*👑 Пользователю с id {target_id} был выдан Premium статус*", parse_mode=ParseMode.MARKDOWN)
 
 # Команда /unpremium
 async def unpremium_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -829,18 +889,18 @@ async def unpremium_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if len(context.args) != 1:
-        await update.message.reply_text("Используйте команду в формате: /unpremium <id пользователя>")
+        await update.message.reply_text("Используйте команду в формате: /unpremium <id пользователя>", parse_mode=ParseMode.MARKDOWN)
         return
 
     target_id = context.args[0]
     if target_id not in users:
-        await update.message.reply_text(f"Пользователь с id {target_id} не найден.")
+        await update.message.reply_text(f"_Пользователь с id {target_id} не найден._", parse_mode=ParseMode.MARKDOWN)
         return
 
     users[target_id]["premium"] = False
     save_data(users)
 
-    await update.message.reply_text(f"У пользователя с id {target_id} забран premium статус.")
+    await update.message.reply_text(f"*⚔️ У пользователя с id {target_id} был забран Premium статус*", parse_mode=ParseMode.MARKDOWN)
 
 # Команда /ban
 async def ban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -850,12 +910,12 @@ async def ban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if len(context.args) != 1:
-        await update.message.reply_text("Используйте команду в формате: /ban <id пользователя>")
+        await update.message.reply_text("_Используйте команду в формате: /ban <id пользователя>_", parse_mode=ParseMode.MARKDOWN)
         return
 
     target_id = context.args[0]
     if target_id not in users:
-        await update.message.reply_text(f"Пользователь с id {target_id} не найден.")
+        await update.message.reply_text(f"_Пользователь с id {target_id} не найден._", parse_mode=ParseMode.MARKDOWN)
         return
 
     users[target_id]["status"] = "banned"
@@ -868,19 +928,21 @@ async def ban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_active_chats()
         await context.bot.send_message(
             chat_with_id,
-            "Пользователь, с которым вы общались, был заблокирован администратором. Чат завершен.",
+            "*⚠️ Пользователь, с которым вы общались, был заблокирован администратором*\n\n/search — _искать нового собеседника_\n/interests — _изменить интересы поиска_",
+            parse_mode=ParseMode.MARKDOWN,
             reply_markup=get_keyboard()
         )
         await context.bot.send_message(
             target_id,
-            "Вы были заблокированы администратором. Чат завершен.",
+            "*⚠️ Вы были заблокированы администратором. Чат завершен.*",
+            parse_mode=ParseMode.MARKDOWN,
             reply_markup=get_keyboard()
         )
         # Присваиваем статус "normal" собеседнику заблокированного пользователя
         users[chat_with_id]["status"] = "normal"
         save_data(users)
 
-    await update.message.reply_text(f"Пользователь с id {target_id} заблокирован.")
+    await update.message.reply_text(f"*🚫 Пользователь с был id {target_id} заблокирован*", parse_mode=ParseMode.MARKDOWN)
 
 # Команда /getid
 async def getid_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -890,11 +952,11 @@ async def getid_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if user_id not in active_chats:
-        await update.message.reply_text("Вы не находитесь в чате.")
+        await update.message.reply_text("🚫 *Данную команду можно использовать только в чате!*\n\n/search — _искать нового собеседника_\n/interests — _изменить интересы поиска_", parse_mode=ParseMode.MARKDOWN)
         return
 
     chat_with_id = active_chats[user_id]["chat_with"]
-    await update.message.reply_text(f"ID собеседника: {chat_with_id}")
+    await update.message.reply_text(f"_ID собеседника: {chat_with_id}_")
 
 # Команда /unban
 async def unban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -904,17 +966,17 @@ async def unban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if len(context.args) != 1:
-        await update.message.reply_text("Используйте команду в формате: /unban <id пользователя>")
+        await update.message.reply_text("_Используйте команду в формате: /unban <id пользователя>_", parse_mode=ParseMode.MARKDOWN)
         return
 
     target_id = context.args[0]
     if target_id not in users:
-        await update.message.reply_text(f"Пользователь с id {target_id} не найден.")
+        await update.message.reply_text(f"_Пользователь с id {target_id} не найден._", parse_mode=ParseMode.MARKDOWN)
         return
 
     users[target_id]["status"] = "normal"
     save_data(users)
-    await update.message.reply_text(f"Пользователь с id {target_id} разблокирован.")
+    await update.message.reply_text(f"*✅ Пользователь с был id {target_id} разблокирован*", parse_mode=ParseMode.MARKDOWN)
 
 # Обработка команды /stats
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -971,6 +1033,7 @@ def main():
     application = Application.builder().token(TOKEN).build()
 
     # Добавление обработчиков команд
+    #application.add_handler(MessageHandler(filters.PHOTO, get_file_id)) # # ДЛЯ ПОЛУЧЕНИЯ file_id фото (Возможно удалить)
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("search", search))
     application.add_handler(CommandHandler("next", next_command))
@@ -985,7 +1048,7 @@ def main():
     application.add_handler(CommandHandler("stats", stats_command))
     application.add_handler(CommandHandler("premium", premium_command))
     application.add_handler(CommandHandler("unpremium", unpremium_command))
-    application.add_handler(CommandHandler("profile", profile_command))  # Здесь добавляем обработчик для команды /profile
+    application.add_handler(CommandHandler("gender", gender_command))  # Здесь добавляем обработчик для команды /gender
     application.add_handler(CallbackQueryHandler(handle_interests, pattern="^interest_"))
     application.add_handler(CallbackQueryHandler(done, pattern="^done$"))
     application.add_handler(CallbackQueryHandler(reset_interests, pattern="^reset_interests$"))
