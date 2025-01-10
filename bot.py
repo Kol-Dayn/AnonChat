@@ -321,9 +321,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE, skip_search
     # Проверка, ищет ли пользователь собеседника
     if users[user_id]["status"] == "in search":
         if not skip_searching_message:
-            await update.message.reply_text("_Вы уже ищете собеседника.._",
-                parse_mode=ParseMode.MARKDOWN,
-                reply_markup=get_keyboard(True))
+            await update.message.reply_text("Вы уже ищете собеседника.", reply_markup=get_keyboard(True))
         return
 
     logging.info(f"(!) Пользователь {user_id} начал поиск собеседника. (!)")
@@ -332,9 +330,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE, skip_search
     users[user_id]["search_via_gender"] = False  # Сбрасываем флаг поиска по полу
     save_data(users)
     if not skip_searching_message:
-        await update.message.reply_text("_Ищем собеседника..._",
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=get_keyboard(True))
+        await update.message.reply_text("_Ищем собеседника..._", parse_mode=ParseMode.MARKDOWN, reply_markup=get_keyboard(True))
 
     user_interests = set(users[user_id].get("interests", []))
     for other_user, other_user_data in users.items():
@@ -355,10 +351,6 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE, skip_search
             if user_interests and not other_user_interests:
                 continue
 
-            # Проверка соответствия пола для премиум пользователей, которые ищут по полу
-            if other_user_data.get("search_via_gender", False) and (users[user_id].get("gender") != other_user_data.get("search_gender")):
-                continue
-
             users[user_id]["chat_with"] = other_user
             users[other_user]["chat_with"] = user_id
             active_chats[user_id] = {"chat_with": other_user, "message_map": {}}
@@ -373,6 +365,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE, skip_search
             common_interests_str = ", ".join(common_interests)
             common_interests_message = f"_Общие интересы: {common_interests_str}_" if common_interests else ""
 
+            # Сообщение для текущего пользователя
             user_message_parts = ["*🔎 Собеседник найден!*"]
 
             if common_interests:
@@ -383,18 +376,11 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE, skip_search
 
             await update.message.reply_text(user_message, parse_mode=ParseMode.MARKDOWN, reply_markup=ReplyKeyboardRemove())
 
+            # Сообщение для другого пользователя
             other_user_message_parts = ["*🔎 Собеседник найден!*"]
 
-            if users[other_user].get("premium", False):
-                other_user_gender = "не указан"
-                if users[user_id].get("gender") == "m":
-                    other_user_gender = "мужчина"
-                elif users[user_id].get("gender") == "w":
-                    other_user_gender = "женщина"
-                other_user_message_parts.append(f"\n_Пол собеседника: {other_user_gender}_")
-
             if common_interests:
-                other_user_message_parts.append(f"{common_interests_message}")
+                other_user_message_parts.append(f"\n{common_interests_message}")
 
             other_user_message_parts.append("\n/next — _искать нового собеседника_\n/stop — _завершить диалог_\n/interests — _изменить интересы поиска_")
             other_user_message = "\n".join(other_user_message_parts)
@@ -475,6 +461,7 @@ async def gender_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             common_interests_str = ", ".join(common_interests)
             common_interests_message = f"_Общие интересы: {common_interests_str}_" if common_interests else ""
 
+            # Сообщение для текущего пользователя
             user_message_parts = ["*🔎 Собеседник найден!*"]
 
             if common_interests:
@@ -485,15 +472,8 @@ async def gender_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             await update.message.reply_text(user_message, parse_mode=ParseMode.MARKDOWN, reply_markup=ReplyKeyboardRemove())
 
+            # Сообщение для другого пользователя
             other_user_message_parts = ["*🔎 Собеседник найден!*"]
-
-            if users[other_user].get("premium", False):
-                other_user_gender = "не указан"
-                if users[user_id].get("gender") == "m":
-                    other_user_gender = "мужчина"
-                elif users[user_id].get("gender") == "w":
-                    other_user_gender = "женщина"
-                other_user_message_parts.append(f"\n_Пол собеседника: {other_user_gender}_")
 
             if common_interests:
                 other_user_message_parts.append(f"\n{common_interests_message}")
@@ -1029,7 +1009,7 @@ def main():
     application.add_handler(CommandHandler("stats", stats_command))
     application.add_handler(CommandHandler("premium", premium_command))
     application.add_handler(CommandHandler("unpremium", unpremium_command))
-    application.add_handler(CommandHandler("profile", profile_command))
+    application.add_handler(CommandHandler("profile", profile_command))  # Здесь добавляем обработчик для команды /profile
     application.add_handler(CallbackQueryHandler(handle_interests, pattern="^interest_"))
     application.add_handler(CallbackQueryHandler(done, pattern="^done$"))
     application.add_handler(CallbackQueryHandler(reset_interests, pattern="^reset_interests$"))
