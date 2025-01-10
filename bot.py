@@ -435,7 +435,7 @@ async def gender_search_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
         photo_file_id = 'AgACAgIAAxkBAAIrPGeBJTFQfZuJnOmUeXkUoemEdU7oAALj5jEbXEMISHAa4jiqR3QuAQADAgADeAADNgQ'
         
         # Создаем inline-кнопку "Купить премиум"
-        inline_button = InlineKeyboardButton("Купить премиум", url="https://t.me/ibuzy")
+        inline_button = InlineKeyboardButton("Купить Premium", url="https://t.me/ibuzy")
         inline_keyboard = InlineKeyboardMarkup([[inline_button]])
 
         await context.bot.send_photo(
@@ -460,7 +460,7 @@ async def gender_search(update: Update, context: ContextTypes.DEFAULT_TYPE, skip
         photo_file_id = 'AgACAgIAAxkBAAIrPGeBJTFQfZuJnOmUeXkUoemEdU7oAALj5jEbXEMISHAa4jiqR3QuAQADAgADeAADNgQ'
         
         # Создаем inline-кнопку "Купить премиум"
-        inline_button = InlineKeyboardButton("Купить премиум", url="https://t.me/ibuzy")
+        inline_button = InlineKeyboardButton("Купить Premium", url="https://t.me/ibuzy")
         inline_keyboard = InlineKeyboardMarkup([[inline_button]])
 
         await context.bot.send_photo(
