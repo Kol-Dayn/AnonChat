@@ -876,7 +876,7 @@ async def premium_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_message(
         chat_id=target_id,
-        text="*👑 Вам был выдан premium статус!*",
+        text="*👑 Вам был выдан Premium статус!*",
         parse_mode=ParseMode.MARKDOWN,
     )
     await update.message.reply_text(f"*👑 Пользователю с id {target_id} был выдан Premium статус*", parse_mode=ParseMode.MARKDOWN)
@@ -956,7 +956,7 @@ async def getid_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     chat_with_id = active_chats[user_id]["chat_with"]
-    await update.message.reply_text(f"_ID собеседника: {chat_with_id}_")
+    await update.message.reply_text(f"_ID собеседника: {chat_with_id}_", parse_mode=ParseMode.MARKDOWN)
 
 # Команда /unban
 async def unban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
