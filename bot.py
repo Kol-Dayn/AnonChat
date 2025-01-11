@@ -191,7 +191,7 @@ def get_keyboard(is_searching=False):
         buttons.append([KeyboardButton("🔎 Поиск собеседника")])
         buttons.append([KeyboardButton("🎭 Поиск по полу")])
         buttons.append([KeyboardButton("📙 Интересы")])
-        buttons.append([KeyboardButton("💅 Настройки пола")])
+        buttons.append([KeyboardButton("💼 Профиль")])  # Добавляем кнопку профиля
     else:
         buttons.append([KeyboardButton("❌ Остановить поиск")])
     return ReplyKeyboardMarkup(buttons, resize_keyboard=True)
@@ -202,10 +202,11 @@ def get_keyboard(is_searching=False):
 #         file_id = update.message.photo[-1].file_id
 #         await update.message.reply_text(f"file_id: {file_id}")
 
+# Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     if user_id not in users:
-        users[user_id] = {"status": "normal", "chat_with": None, "interests": [], "gender": None, "premium": False}
+        users[user_id] = {"status": "normal", "chat_with": None, "interests": [], "gender": None, "premium": False, "chats_count": 0}
         save_data(users)
     if users[user_id]["status"] == "chatting":
         await update.message.reply_text(
@@ -220,7 +221,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
-    # Замените 'YOUR_PHOTO_FILE_ID' на действительный file_id вашего фото
     photo_file_id = 'AgACAgIAAxkBAAIq72eBGj6uFSeSE1dKa1zxAsS5LbWdAAKN6DEb45v5S1f--cKVyg-zAQADAgADeAADNgQ'
     
     # Создаем inline-кнопку
@@ -490,34 +490,67 @@ async def gender_search(update: Update, context: ContextTypes.DEFAULT_TYPE, skip
 
     await find_partner(update, context)
 
-# Команда /gender
-async def gender_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# Команда /profile
+async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
+    user_data = users.get(user_id, {"gender": "не указан", "premium": False, "chats_count": 0})
+    
+    current_gender = user_data.get("gender", "не указан")
+    if current_gender == "m":
+        current_gender_text = "мужчина"
+    elif current_gender == "w":
+        current_gender_text = "девушка"
+    else:
+        current_gender_text = "не указан"
+    
+    premium_status = "Есть" if user_data.get("premium", False) else "Нет"
+    chats_count = user_data.get("chats_count", 0)
+
+    profile_message = (
+        f"#️⃣ ID — {user_id}\n\n"
+        f"👫 Пол — {current_gender_text}\n"
+        f"💬 Чатов: {chats_count}\n\n"
+        f"👑 VIP статус — {premium_status}"
+    )
+
+    buttons = [
+        [InlineKeyboardButton("Настройки пола", callback_data="profile_settings")]
+    ]
+
+    if update.message:
+        await update.message.reply_text(profile_message, reply_markup=InlineKeyboardMarkup(buttons), parse_mode=ParseMode.MARKDOWN)
+    elif update.callback_query:
+        query = update.callback_query
+        await query.edit_message_text(profile_message, reply_markup=InlineKeyboardMarkup(buttons), parse_mode=ParseMode.MARKDOWN)
+
+# Обработчик для команды профиля
+async def profile_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = str(query.from_user.id)
 
     current_gender = users[user_id].get("gender", "не указан")
     if current_gender == "m":
         current_gender_text = "мужчина"
-        current_gender_emoji = "👨‍🦰"
     elif current_gender == "w":
         current_gender_text = "девушка"
-        current_gender_emoji = "👩‍🦱"
     else:
         current_gender_text = "не указан"
 
     if current_gender_text == "не указан":
-        message_text = "*💅 Настройки пола*\n\n_Укажите свой пол, что бы поиск по полу находил вам собеседников быстрее._\n\n_У вас не указан пол 👀_" 
+        message_text = "*💅 Настройки пола*\n\n_Укажите свой пол, чтобы поиск по полу находил вам собеседников быстрее._\n\n_У вас не указан пол 👀_"
     else:
-        message_text = f"*💅 Настройки пола*\n\n_Укажите свой пол, что бы поиск по полу находил вам собеседников быстрее._\n\n_Текущий пол: {current_gender_text} {current_gender_emoji}_"
+        message_text = f"*💅 Настройки пола*\n\n_Укажите свой пол, чтобы поиск по полу находил вам собеседников быстрее._\n\n_Текущий пол: {current_gender_text}_"
 
     buttons = [
         [
             InlineKeyboardButton("👨‍🦰 Я парень", callback_data="set_gender_m"),
             InlineKeyboardButton("👩‍🦱 Я девушка", callback_data="set_gender_w")
         ],
-        [InlineKeyboardButton("❌ Удалить мой пол", callback_data="delete_gender")]
+        [InlineKeyboardButton("❌ Удалить мой пол", callback_data="delete_gender")],
+        [InlineKeyboardButton("◀️ Вернуться назад", callback_data="back_to_profile")]
     ]
-    await update.message.reply_text(message_text, reply_markup=InlineKeyboardMarkup(buttons), parse_mode=ParseMode.MARKDOWN)
 
+    await query.edit_message_text(message_text, reply_markup=InlineKeyboardMarkup(buttons), parse_mode=ParseMode.MARKDOWN)
 
 # Обработчик выбора пола
 async def handle_gender(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -526,16 +559,18 @@ async def handle_gender(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == "set_gender_m":
         users[user_id]["gender"] = "m"
-        await query.edit_message_text("Спасибо что указали пол!")
     elif query.data == "set_gender_w":
         users[user_id]["gender"] = "w"
-        await query.edit_message_text("Спасибо что указали пол!")
     elif query.data == "delete_gender":
         if "gender" in users[user_id]:
             del users[user_id]["gender"]
-        await query.edit_message_text("Пол успешно удалён")
 
     save_data(users)
+    await profile_command(update, context)
+
+# Обработчик возврата к профилю
+async def back_to_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await profile_command(update, context)
 
 # Остановка поиска
 async def stop_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -555,6 +590,7 @@ async def stop_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("_Поиск остановлен_", parse_mode=ParseMode.MARKDOWN, reply_markup=get_keyboard())
 
+# Команда /next
 async def next_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     if user_id not in active_chats:
@@ -591,6 +627,8 @@ async def next_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     users[other_user]["status"] = "normal"
     users[other_user]["chat_with"] = None
+    users[other_user]["chats_count"] += 1
+    users[user_id]["chats_count"] += 1
     save_data(users)
     try:
         await context.bot.send_message(
@@ -675,6 +713,8 @@ async def stop_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users[user_id]["chat_with"] = None
     users[other_user]["chat_with"] = None
     users[other_user]["status"] = "normal"
+    users[other_user]["chats_count"] += 1
+    users[user_id]["chats_count"] += 1
     save_data(users)
     logging.info(f"(!) Чат между пользователем {user_id} и пользователем {other_user} завершен, они занесены в блок на {timeout_duration}. (!)")
     
@@ -732,8 +772,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await interests_command(update, context)
         elif update.message.text == "🎭 Поиск по полу":
             await gender_search_menu(update, context)
-        elif update.message.text == "💅 Настройки пола":
-            await gender_command(update, context)
+        elif update.message.text == "💼 Профиль":
+            await profile_command(update, context)
         elif update.message.text == "👨‍🦰 Поиск М" or update.message.text == "👩‍🦱 Поиск Д":
             await gender_search(update, context)
         elif update.message.text == "◀️ Вернуться назад":
@@ -1039,7 +1079,7 @@ def main():
     application = Application.builder().token(TOKEN).build()
 
     # Добавление обработчиков команд
-    #application.add_handler(MessageHandler(filters.PHOTO, get_file_id)) # # ДЛЯ ПОЛУЧЕНИЯ file_id фото (Возможно удалить)
+    #application.add_handler(MessageHandler(filters.PHOTO, get_file_id))  # ДЛЯ ПОЛУЧЕНИЯ file_id фото (Возможно удалить)
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("search", search))
     application.add_handler(CommandHandler("next", next_command))
@@ -1054,12 +1094,14 @@ def main():
     application.add_handler(CommandHandler("stats", stats_command))
     application.add_handler(CommandHandler("premium", premium_command))
     application.add_handler(CommandHandler("unpremium", unpremium_command))
-    application.add_handler(CommandHandler("gender", gender_command))  # Здесь добавляем обработчик для команды /gender
+    application.add_handler(CommandHandler("profile", profile_command))  # Добавляем обработчик для команды /profile
     application.add_handler(CallbackQueryHandler(handle_interests, pattern="^interest_"))
     application.add_handler(CallbackQueryHandler(done, pattern="^done$"))
     application.add_handler(CallbackQueryHandler(reset_interests, pattern="^reset_interests$"))
     application.add_handler(CallbackQueryHandler(handle_gender, pattern="^set_gender_"))
     application.add_handler(CallbackQueryHandler(handle_gender, pattern="^delete_gender$"))
+    application.add_handler(CallbackQueryHandler(profile_settings, pattern="^profile_settings$"))  # Добавляем обработчик для настройки профиля
+    application.add_handler(CallbackQueryHandler(back_to_profile, pattern="^back_to_profile$"))  # Добавляем обработчик для возврата к профилю
     application.add_handler(MessageHandler((filters.TEXT | filters.ATTACHMENT) & ~filters.COMMAND, handle_message))
 
     # Сохранение текущего тайм-аута в контекст бота при запуске
