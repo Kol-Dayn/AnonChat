@@ -206,7 +206,16 @@ def get_keyboard(is_searching=False):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     if user_id not in users:
-        users[user_id] = {"status": "normal", "chat_with": None, "interests": [], "gender": None, "premium": False, "chats_count": 0}
+        users[user_id] = {
+            "status": "normal",
+            "chat_with": None,
+            "interests": [],
+            "gender": None,
+            "premium": False,
+            "chats_count": 0,
+            "likes": 0,
+            "dislikes": 0
+        }
         save_data(users)
     if users[user_id]["status"] == "chatting":
         await update.message.reply_text(
@@ -493,7 +502,7 @@ async def gender_search(update: Update, context: ContextTypes.DEFAULT_TYPE, skip
 # Команда /profile
 async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
-    user_data = users.get(user_id, {"gender": "не указан", "premium": False, "chats_count": 0})
+    user_data = users.get(user_id, {"gender": "не указан", "premium": False, "chats_count": 0, "likes": 0, "dislikes": 0})
     
     current_gender = user_data.get("gender", "не указан")
     if current_gender == "m":
@@ -505,11 +514,14 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     premium_status = "Есть" if user_data.get("premium", False) else "Нет"
     chats_count = user_data.get("chats_count", 0)
+    likes = user_data.get("likes", 0)
+    dislikes = user_data.get("dislikes", 0)
 
     profile_message = (
         f"#️⃣ ID — {user_id}\n\n"
         f"👫 Пол — {current_gender_text}\n"
-        f"💬 Чатов: {chats_count}\n\n"
+        f"💬 Чатов — {chats_count}\n"
+        f"👁 Карма — 👍 {likes} 👎 {dislikes}\n\n"
         f"👑 VIP статус — {premium_status}"
     )
 
@@ -608,28 +620,29 @@ async def next_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     timeout_str = blocked_users.get("timeout_duration", "1h")
     time_amount = int(timeout_str[:-1])
     time_unit = timeout_str[-1]
-    
+
     if time_unit == 's':
         timeout_duration = timedelta(seconds=time_amount)
     elif time_unit == 'm':
-        timeout_duration = timedelta(minutes=time_amount)
+        timeout_duration = timedelta(minutes(time_amount))
     elif time_unit == 'h':
-        timeout_duration = timedelta(hours=time_amount)
+        timeout_duration = timedelta(hours(time_amount))
     elif time_unit == 'd':
-        timeout_duration = timedelta(days=time_amount)
-    
+        timeout_duration = timedelta(days(time_amount))
+
     now = datetime.now()
     pair = ",".join(sorted([user_id, other_user]))
     blocked_users[pair] = (now + timeout_duration).isoformat()
-    
+
     save_blocked_users(blocked_users)
     save_active_chats()
-    
+
     users[other_user]["status"] = "normal"
     users[other_user]["chat_with"] = None
     users[other_user]["chats_count"] += 1
     users[user_id]["chats_count"] += 1
     save_data(users)
+
     try:
         await context.bot.send_message(
             other_user,
@@ -637,15 +650,17 @@ async def next_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=get_keyboard(),
         )
+        await context.bot.send_message(
+            other_user,
+            "_Пожалуйста, оцените вашего собеседника:_",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("👍", callback_data=f"like_{user_id}"),
+                 InlineKeyboardButton("👎", callback_data=f"dislike_{user_id}")]
+            ])
+        )
     except Exception as e:
         logging.error(f"Ошибка при уведомлении пользователя {other_user}: {e}")
-
-    if users[user_id]["status"] == "premium":
-        users[user_id]["search_status"] = "in search"
-    else:
-        users[user_id]["status"] = "in search"
-    users[user_id]["chat_with"] = None
-    save_data(users)
 
     # Проверка на поиск по полу
     if users[user_id].get("search_via_gender", False):
@@ -667,13 +682,35 @@ async def next_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 users[user_id]["search_gender"] = "w"
             save_data(users)
             await gender_search(update, context, skip_searching_message=True)
-            return
+        else:
+            await update.message.reply_text(
+                "_Текущий чат завершен. Ищем нового собеседника..._",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=get_keyboard(True),
+            )
+    else:
+        await update.message.reply_text(
+            "_Текущий чат завершен. Ищем нового собеседника..._",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=get_keyboard(True),
+        )
 
     await update.message.reply_text(
-        "_Текущий чат завершен. Ищем нового собеседника..._",
+        "_Пожалуйста, оцените вашего собеседника:_",
         parse_mode=ParseMode.MARKDOWN,
-        reply_markup=get_keyboard(True),
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("👍", callback_data=f"like_{other_user}"),
+             InlineKeyboardButton("👎", callback_data=f"dislike_{other_user}")]
+        ])
     )
+
+    if users[user_id]["status"] == "premium":
+        users[user_id]["search_status"] = "in search"
+    else:
+        users[user_id]["status"] = "in search"
+    users[user_id]["chat_with"] = None
+    save_data(users)
+
     await search(update, context, skip_searching_message=True)
 
 # Команда /stop
@@ -693,7 +730,7 @@ async def stop_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     timeout_str = blocked_users.get("timeout_duration", "1h")
     time_amount = int(timeout_str[:-1])
     time_unit = timeout_str[-1]
-    
+
     if time_unit == 's':
         timeout_duration = timedelta(seconds=time_amount)
     elif time_unit == 'm':
@@ -702,14 +739,14 @@ async def stop_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         timeout_duration = timedelta(hours=time_amount)
     elif time_unit == 'd':
         timeout_duration = timedelta(days=time_amount)
-    
+
     now = datetime.now()
     pair = ",".join(sorted([user_id, other_user]))
     blocked_users[pair] = (now + timeout_duration).isoformat()
-    
+
     save_blocked_users(blocked_users)
     save_active_chats()
-    
+
     users[user_id]["chat_with"] = None
     users[other_user]["chat_with"] = None
     users[other_user]["status"] = "normal"
@@ -725,16 +762,51 @@ async def stop_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_data(users)
 
     await update.message.reply_text(
-        "🛑 *Вы завершили чат с собеседником*\n\n/search — _искать нового собеседника_\n/interests — _изменить интересы поиска_",
+        "🛑 *Вы завершили чат*\n\n/search — _искать нового собеседника_\n/interests — _изменить интересы поиска_",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=get_keyboard()
     )
+
+    await update.message.reply_text(
+        "_Пожалуйста, оцените вашего собеседника:_",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("👍", callback_data=f"like_{other_user}"),
+             InlineKeyboardButton("👎", callback_data=f"dislike_{other_user}")]
+        ])
+    )
+
     await context.bot.send_message(
         other_user,
         "🛑 *Ваш собеседник завершил чат*\n\n/search — _искать нового собеседника_\n/interests — _изменить интересы поиска_",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=get_keyboard(),
     )
+
+    await context.bot.send_message(
+        other_user,
+        "_Пожалуйста, оцените вашего собеседника:_",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("👍", callback_data=f"like_{user_id}"),
+             InlineKeyboardButton("👎", callback_data=f"dislike_{user_id}")]
+        ])
+    )
+
+# Обработчик для кнопок оценки
+async def handle_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    data = query.data.split('_')
+    action = data[0]
+    rated_user_id = data[1]
+
+    if action == "like":
+        users[rated_user_id]["likes"] += 1
+    elif action == "dislike":
+        users[rated_user_id]["dislikes"] += 1
+
+    save_data(users)
+    await query.edit_message_text("_Спасибо за отзыв!_", parse_mode=ParseMode.MARKDOWN)
 
 # Команда /link
 async def link(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1102,6 +1174,7 @@ def main():
     application.add_handler(CallbackQueryHandler(handle_gender, pattern="^delete_gender$"))
     application.add_handler(CallbackQueryHandler(profile_settings, pattern="^profile_settings$"))  # Добавляем обработчик для настройки профиля
     application.add_handler(CallbackQueryHandler(back_to_profile, pattern="^back_to_profile$"))  # Добавляем обработчик для возврата к профилю
+    application.add_handler(CallbackQueryHandler(handle_rating, pattern="^(like|dislike)_"))  # Добавляем обработчик для оценки
     application.add_handler(MessageHandler((filters.TEXT | filters.ATTACHMENT) & ~filters.COMMAND, handle_message))
 
     # Сохранение текущего тайм-аута в контекст бота при запуске
